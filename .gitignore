@@ -1,0 +1,39 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# production build
+/build
+
+# testing
+/coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/
+
+# misc
+.DS_Store
+*.pem
+*.tsbuildinfo
+next-env.d.ts
+
+# debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env
+.env
+.env*.local
+
+# vercel
+.vercel
+
+# geo 아티팩트 — iOS 코어 번들/스크립트로 재생성 가능(대용량). .gitkeep 만 추적.
+# 채우기: BALJACHWI_IOS_ROOT=../baljachwi npm run copy-geo && npm run gen-choropleth
+/public/geo/*
+!/public/geo/.gitkeep
