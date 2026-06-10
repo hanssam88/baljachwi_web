@@ -23,3 +23,19 @@ button {
   font-family: inherit;
   cursor: pointer;
 }
+
+/* 지역지도 choropleth — 색은 data-state로만(상태 변경 시 attribute만 갱신, 0 리렌더 색칠).
+   stroke는 경계선, fill은 방문 상태색. */
+.region {
+  stroke: var(--separator);
+  vector-effect: non-scaling-stroke;
+}
+.region[data-state='visited'] {
+  fill: var(--st-visited);
+}
+.region[data-state='wantToGo'] {
+  fill: var(--st-want);
+}
+.region[data-state='notVisited'] {
+  fill: var(--st-unvisited);
+}
