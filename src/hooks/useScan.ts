@@ -32,6 +32,9 @@ function deviceOffsetSeconds(): number {
 export function useScan() {
   const [state, setState] = useState<ScanState>(INITIAL);
   const workerRef = useRef<Worker | null>(null);
+  // 동시 가져오기 가드 — 드롭존은 busy와 무관하게 호출될 수 있어 훅 레벨에서 막는다.
+  // (worker 메시지 리스너가 교차 수신되어 진행률·결과가 뒤섞이는 것을 방지.)
+  const runningRef = useRef(false);
 
   // 언마운트 시 worker 정리.
   useEffect(() => {
@@ -53,6 +56,9 @@ export function useScan() {
   const importFiles = useCallback(
     async (files: File[]): Promise<void> => {
       if (files.length === 0) return;
+      if (runningRef.current) return; // 진행 중이면 무시(중복 호출 가드)
+      runningRef.current = true;
+      try {
       const offset = deviceOffsetSeconds();
       setState({ phase: 'reading-exif', progress: 0, label: 'EXIF 읽는 중…', error: null });
 
@@ -136,6 +142,9 @@ export function useScan() {
       }
 
       setState({ phase: 'done', progress: 1, label: '완료', error: null });
+      } finally {
+        runningRef.current = false;
+      }
     },
     [getWorker],
   );

@@ -4,7 +4,7 @@
 // 핀(썸네일) + 경로선 + bbox 카메라. maplibre는 이 컴포넌트에서만 동적 import
 // → 지역탭은 100% 오프라인 유지. 기본맵 타일이 유일한 외부 호출(무키, 프라이버시 고지).
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { TripRecord } from '@/data/models';
 import { usePhotosForTrip } from '@/hooks/useTrips';
@@ -20,6 +20,10 @@ export function TripMapView({ trip, onBack }: { trip: TripRecord; onBack: () => 
   const [needNotice, setNeedNotice] = useState(false);
   const [ack, setAck] = useState(false);
 
+  // liveQuery는 매 발화마다 새 배열 참조를 emit한다. 지도 effect가 사진 '집합'이 실제로 바뀔 때만
+  // 재생성되도록, 안정적 키(id 순서)를 deps로 쓴다(매 emit마다 map.remove→재생성·타일 재fetch 방지).
+  const photosKey = useMemo(() => photos.map((p) => p.localIdentifier).join(','), [photos]);
+
   // 최초 진입 1회 타일 고지.
   useEffect(() => {
     const seen = typeof localStorage !== 'undefined' && localStorage.getItem(TILE_NOTICE_KEY);
@@ -31,6 +35,7 @@ export function TripMapView({ trip, onBack }: { trip: TripRecord; onBack: () => 
   useEffect(() => {
     if (!ack || !mapEl.current || photos.length === 0) return;
     let map: import('maplibre-gl').Map | null = null;
+    // objectURL은 ref에 누적 — cleanup이 비동기 루프가 만든 URL까지 모두 revoke하게 한다.
     const urls: string[] = [];
     let cancelled = false;
 
@@ -78,16 +83,22 @@ export function TripMapView({ trip, onBack }: { trip: TripRecord; onBack: () => 
         // 핀(썸네일 blob → objectURL Marker). 없으면 점.
         const r = repo();
         for (const p of photos) {
-          const blob = await r.thumbFor(p.localIdentifier).catch(() => null);
-          const elm = document.createElement('div');
-          elm.className = 'trip-pin';
-          if (blob) {
-            const url = URL.createObjectURL(blob);
-            urls.push(url);
-            elm.style.backgroundImage = `url(${url})`;
-          }
+          // cancelled 체크를 createObjectURL '이전'에 둔다 — 정리 이후 URL이 새지 않게.
           if (!map || cancelled) break;
-          new maplibre.Marker({ element: elm }).setLngLat([p.lon, p.lat]).addTo(map);
+          const blob = await r.thumbFor(p.localIdentifier).catch(() => null);
+          if (!map || cancelled) break;
+          try {
+            const elm = document.createElement('div');
+            elm.className = 'trip-pin';
+            if (blob) {
+              const url = URL.createObjectURL(blob);
+              urls.push(url);
+              elm.style.backgroundImage = `url(${url})`;
+            }
+            new maplibre.Marker({ element: elm }).setLngLat([p.lon, p.lat]).addTo(map);
+          } catch {
+            // 개별 핀 실패(이상 좌표 등)는 건너뜀 — 나머지 핀/카메라는 계속.
+          }
         }
 
         // bbox 카메라(최소 span 클램프).
@@ -108,7 +119,10 @@ export function TripMapView({ trip, onBack }: { trip: TripRecord; onBack: () => 
       urls.forEach((u) => URL.revokeObjectURL(u));
       map?.remove();
     };
-  }, [ack, photos, trip]);
+    // photos 전체 참조 대신 안정 키(photosKey)·trip.id로 좁혀, liveQuery 재발화마다 지도가
+    // 재생성되지 않게 한다. photos는 closure로 캡처(같은 키면 같은 데이터).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ack, trip.id, photosKey]);
 
   const acceptNotice = () => {
     if (typeof localStorage !== 'undefined') localStorage.setItem(TILE_NOTICE_KEY, '1');
@@ -134,7 +148,9 @@ export function TripMapView({ trip, onBack }: { trip: TripRecord; onBack: () => 
             <div style={noticeOverlay} role="dialog" aria-label="외부 타일 고지">
               <div style={noticeCard}>
                 <p style={noticeText}>
-                  경로지도는 지도 타일을 외부에서 불러옵니다. 사진·위치 데이터는 전송되지 않습니다.
+                  지도 타일을 외부 서버(OpenFreeMap)에서 불러오므로, 보고 있는 지역의 대략적
+                  위치가 타일 서버에 전달될 수 있습니다. 사진 파일·정확한 GPS 좌표·식별자는
+                  전송되지 않습니다.
                 </p>
                 <button type="button" style={noticeBtn} onClick={acceptNotice}>
                   확인

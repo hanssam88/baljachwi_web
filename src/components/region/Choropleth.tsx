@@ -48,6 +48,7 @@ export function Choropleth({
   const [vp, setVp] = useState<MapViewport>(() =>
     makeMapViewport(1, { width: 0, height: 0 }, { x: c.x, y: c.y }),
   );
+  const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
   const af = viewportAffine(vp);
@@ -72,10 +73,17 @@ export function Choropleth({
   const onPointerMove = (e: PointerEvent<SVGSVGElement>) => {
     const d = dragRef.current;
     if (!d) return;
-    // 화면 픽셀 이동 → viewBox 단위(대략 w/clientWidth 비율). 단순화: deltaclient 그대로 pan(점 공간).
+    // pan은 viewBox(점) 공간 평행이동 — 화면 픽셀 델타를 viewBox 단위로 환산한다.
+    // 환산비 = viewBox폭 / 렌더폭. (pan은 zoom 이후 점 공간에 더해지므로 zoom 보정 불필요.)
+    const rect = svgRef.current?.getBoundingClientRect();
+    const sx = rect && rect.width > 0 ? c.w / rect.width : 1;
+    const sy = rect && rect.height > 0 ? c.h / rect.height : 1;
     setVp((p) => ({
       ...p,
-      pan: { width: d.panX + (e.clientX - d.x), height: d.panY + (e.clientY - d.y) },
+      pan: {
+        width: d.panX + (e.clientX - d.x) * sx,
+        height: d.panY + (e.clientY - d.y) * sy,
+      },
     }));
   };
   const onPointerUp = () => {
@@ -88,6 +96,7 @@ export function Choropleth({
   return (
     <div style={wrap}>
       <svg
+        ref={svgRef}
         viewBox={viewBox}
         style={svg}
         role="img"
