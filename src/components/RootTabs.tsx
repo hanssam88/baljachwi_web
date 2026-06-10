@@ -1,7 +1,12 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { TYPE } from '@/lib/tokens';
+import { useLive } from '@/hooks/useLive';
+import { getDB } from '@/data/db';
+import { ImportOnboarding } from '@/components/ImportOnboarding';
+import { RegionMapScreen } from '@/components/region/RegionMapScreen';
+import { TripListScreen } from '@/components/trip/TripListScreen';
 
 type TabKey = 'region' | 'trip';
 
@@ -16,22 +21,33 @@ const tabId = (k: TabKey) => `tab-${k}`;
 
 /**
  * iOS RootTabView 의 웹 대응 — 지역지도 / 경로지도 2탭 셸.
- * Phase 0: 가져온 사진이 없으므로 두 탭 모두 가져오기 빈 상태(ScanStateGate)를 보여준다.
- * Phase 2에서 ImportOnboarding(파일 선택/드롭존)과 실제 지도가 연결된다.
+ * DB에 사진이 없으면 두 탭 모두 가져오기 온보딩을, 있으면 각 지도를 보여준다.
+ * SSR 가드: 마운트 후에만 IndexedDB(useLive) 구독 — 프리렌더 단계 안전.
  */
 export function RootTabs() {
   const [active, setActive] = useState<TabKey>('region');
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const photoCount = useLive(() => getDB().photoRefs.count(), []);
+  const hasPhotos = (photoCount ?? 0) > 0;
 
   return (
     <div style={shell}>
       <main
         id={PANEL_ID}
-        style={content}
+        style={hasPhotos ? contentFill : content}
         role="tabpanel"
         aria-labelledby={tabId(active)}
         aria-label={TABS.find((t) => t.key === active)?.label}
       >
-        <EmptyImportState />
+        {!mounted ? null : !hasPhotos ? (
+          <ImportOnboarding />
+        ) : active === 'region' ? (
+          <RegionMapScreen />
+        ) : (
+          <TripListScreen />
+        )}
       </main>
 
       <nav style={tabbar} role="tablist" aria-label="메인 탭">
@@ -57,21 +73,13 @@ export function RootTabs() {
   );
 }
 
-function EmptyImportState() {
-  return (
-    <div style={empty}>
-      <p style={emptyTitle}>아직 가져온 사진이 없습니다</p>
-      <p style={emptySub}>사진을 가져오면 지역지도와 경로지도가 채워집니다</p>
-    </div>
-  );
-}
-
 const shell: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   minHeight: '100dvh',
 };
 
+// 온보딩(빈 상태)은 중앙 정렬, 지도(채움)는 전체 채움.
 const content: CSSProperties = {
   flex: 1,
   display: 'flex',
@@ -80,25 +88,11 @@ const content: CSSProperties = {
   padding: 'var(--space-5)',
 };
 
-const empty: CSSProperties = {
-  textAlign: 'center',
-  maxWidth: 320,
-};
-
-const emptyTitle: CSSProperties = {
-  margin: 0,
-  fontSize: TYPE.headline.size,
-  fontWeight: TYPE.headline.weight,
-  lineHeight: TYPE.headline.lineHeight,
-  color: 'var(--label)',
-};
-
-const emptySub: CSSProperties = {
-  marginTop: 'var(--space-2)',
-  marginBottom: 0,
-  fontSize: TYPE.subheadline.size,
-  lineHeight: TYPE.subheadline.lineHeight,
-  color: 'var(--label2)',
+const contentFill: CSSProperties = {
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  minHeight: 0,
 };
 
 const tabbar: CSSProperties = {
