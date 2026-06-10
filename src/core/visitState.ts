@@ -14,3 +14,7 @@ export function parseVisitState(raw: string): VisitState | undefined {
     ? (raw as VisitState)
     : undefined;
 }
+
+/** 지역 레벨. Swift RegionStatus.level 은 String("sido"|"sigungu") — TS는 리터럴 유니언.
+ *  core 의 단일 정의 지점 — models.ts·regionAggregate.ts·regionMatcher.ts 는 여기서 import. */
+export type RegionLevel = 'sido' | 'sigungu';
