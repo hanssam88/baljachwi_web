@@ -13,7 +13,7 @@
 |------|------|
 | 결과물 정의 | 풀 플로우 수직 슬라이스: 사진 가져오기(실제 EXIF) → 지역지도 색칠 → 경로지도 핀+경로선 |
 | TDD 수준 | **코어만 골든 TDD**(Swift 테스트 이식, Red→Green). 데이터 레이어는 reconcile 핵심 테스트만. UI는 구현 후 스모크. 멀티에이전트 리뷰는 마지막 1회(Code Reviewer + Security Engineer 병렬) — 글로벌 규칙의 명시적 완화, 사용자 승인됨 |
-| 영속화 | Dexie 포함 (기반 스펙 스키마 v1 그대로) |
+| 영속화 | Dexie 포함 — 기반 스펙 v1을 다음과 같이 개정: 테이블명 photoRefs/tripRecords/regionStatuses/homeCache/thumbs(5개), regions PK는 `regionCode` 단순화(시도 2자리·시군구 5자리 비충돌), meta 테이블 제거(타일 고지는 localStorage) |
 | 검증 사진 | 샘플 지오태그 JPEG 생성 스크립트 (`scripts/make-geotagged.mjs`, piexifjs) |
 | 경로지도 | MapLibre GL + 무키 외부 타일(CARTO/OpenFreeMap) — 유일한 외부 호출, 인앱 고지. 사용자 승인됨 |
 | 코드 운명 | 본 구현의 기반 (Phase 1~4의 압축 선행) |

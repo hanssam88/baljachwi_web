@@ -1,0 +1,1177 @@
+{
+ "cards": [
+  {
+   "key": "geoTypes",
+   "ts": "src/core/geoTypes.ts + src/core/visitState.ts",
+   "module": "geoTypes",
+   "exportsTs": "// ── src/core/geoTypes.ts ──────────────────────────────────────────────\n// PointInPolygon은 위상 판정이므로 투영 없이 (x = lon, y = lat) 평면을 그대로 사용\n// (MapProjection 비의존). 이 주석은 pointInPolygon 포팅 시 축 혼동 방지용으로 보존할 것.\n\n/** 위경도 좌표. Swift: Equatable+Hashable — TS에서는 구조적 비교 헬퍼로 대체. */\nexport interface Coordinate {\n  lat: number;\n  lon: number;\n}\n\n/** 단일 폴리곤 — 외곽 링 1개 + 0개 이상의 홀. holes는 옵셔널 금지(항상 [] 명시). */\nexport interface Polygon {\n  outer: Coordinate[];\n  holes: Coordinate[][];\n}\n\n/** 다중 폴리곤 — 옹진군·신안군 등 다도서 표현. 매칭/히트테스트 SSOT 입력 타입. */\nexport interface MultiPolygon {\n  polygons: Polygon[];\n}\n\n/** 경계 박스. Swift 원본은 TripSegmenter.swift:41 정의지만 웹 포트에서는 geoTypes로 이전 배치(공유 타입 SSOT). */\nexport interface BBox {\n  minLat: number;\n  minLon: number;\n  maxLat: number;\n  maxLon: number;\n}\n\n/** Swift Polygon.init(outer:holes: = []) 의 기본 인자 대응 헬퍼. */\nexport function makePolygon(outer: Coordinate[], holes: Coordinate[][] = []): Polygon {\n  return { outer, holes };\n}\n\n// ── src/core/visitState.ts ────────────────────────────────────────────\n/** 지역 방문 상태. Swift: enum String RawValue — JSON 영속 문자열과 1:1. */\nexport type VisitState = 'visited' | 'wantToGo' | 'notVisited';\n\n/** Swift CaseIterable.allCases — 선언 순서 보존: visited, wantToGo, notVisited. */\nexport const VISIT_STATE_ALL_CASES: readonly VisitState[] = ['visited', 'wantToGo', 'notVisited'];\n\n/** Swift VisitState(rawValue:) 실패 가능 이니셜라이저 대응. 미지 문자열은 undefined (throw 금지). */\nexport function parseVisitState(raw: string): VisitState | undefined {\n  return (VISIT_STATE_ALL_CASES as readonly string[]).includes(raw)\n    ? (raw as VisitState)\n    : undefined;\n}",
+   "constants": [
+    "VisitState.visited=\"visited\"",
+    "VisitState.wantToGo=\"wantToGo\"",
+    "VisitState.notVisited=\"notVisited\"",
+    "VISIT_STATE_ALL_CASES 순서=[visited, wantToGo, notVisited] (Swift 선언 순서)"
+   ],
+   "deps": [],
+   "testsToPort": [
+    {
+     "name": "visitState rawValue/parse/allCases (Swift: ModelTests.testVisitStateRawValueAndCases, ModelTests.swift:32-36)",
+     "asserts": "(1) 'visited' 리터럴 === \"visited\" (rawValue 동등성), (2) parseVisitState(\"wantToGo\") === 'wantToGo', (3) new Set(VISIT_STATE_ALL_CASES)가 {visited, wantToGo, notVisited}와 동일하고 크기 3. 추가로 배열 순서 [visited, wantToGo, notVisited] 자체도 검증 권장(Swift Set 비교는 순서 무시지만 CaseIterable 순서 보존 확인용)."
+    },
+    {
+     "name": "parseVisitState 미지 문자열 → undefined (신규, Swift 실패 가능 init 대응)",
+     "asserts": "parseVisitState(\"unknown\") === undefined, parseVisitState(\"\") === undefined, parseVisitState(\"Visited\")(대문자) === undefined — 대소문자 구분 확인."
+    },
+    {
+     "name": "makePolygon 기본 holes (신규 스모크, Swift init 기본 인자 대응)",
+     "asserts": "makePolygon([{lat:0,lon:0},{lat:0,lon:1},{lat:1,lon:0}]) → holes가 정확히 [] (undefined 아님, 길이 0). 두 번째 인자 전달 시 그대로 보존."
+    }
+   ],
+   "notes": "[1] BBox 출처: Swift에서는 TripSegmenter.swift:41에 정의되어 TripMetrics/ScanPipeline/DisplayGeoStore 등이 공유한다. TS 포트에서는 geoTypes.ts로 이전 배치하고 tripSegmenter 등 모든 모듈이 여기서 import — tripSegmenter 포팅 시 BBox 재정의 금지. [2] Coordinate의 Swift Equatable/Hashable: 코어 내 Set<Coordinate>/Dictionary 키 사용처 없음(grep 확인) — plain interface로 충분하며 동등성 비교가 필요하면 (a.lat===b.lat && a.lon===b.lon) 구조 비교를 호출부에서 수행. JS의 ===는 참조 비교임을 다운스트림에 주지. [3] Polygon.holes는 `holes?:` 옵셔널로 만들지 말 것 — Swift는 비옵셔널 빈 배열이며, pointInPolygon에서 undefined 분기가 생기면 byte-faithful이 깨진다. 기본값은 makePolygon 헬퍼로만 제공. [4] VisitState는 TS enum이 아닌 문자열 리터럴 유니언 — Codable String RawValue와 JSON 직렬화가 1:1이고 regionAggregate의 rank() 우선순위 로직이 이 정확한 문자열에 의존. [5] MultiPolygon은 {polygons: Polygon[]} 래퍼 객체 유지(Polygon[]로 평탄화 금지) — geojsonDecode/regionMatcher 시그니처가 래퍼 타입을 받음. PLAN 주석대로 평면 [[Coordinate]] 표현은 다도서 오판 원인이므로 SSOT 입력은 항상 Polygon/MultiPolygon. [6] Date/시간/부동소수점 산술 없음 — 순수 타입 모듈이라 시간 함정 해당 없음. [7] GeoTypes.swift의 \\\"(x=lon, y=lat) 평면, MapProjection 비의존\\\" 독스트링은 pointInPolygon 포팅 에이전트가 축을 바꾸지 않도록 TS 주석으로 반드시 이식. [8] 프롬프트의 dataActorReconcile 범위 지침(reconcile/upsert/prune/visited-wins/단일행 home만, merge/split/title/delete 제외)은 본 모듈과 무관 — 본 모듈은 의존성 없는 리프(leaf) 타입 모듈."
+  },
+  {
+   "key": "pointInPolygon",
+   "ts": "src/core/pointInPolygon.ts",
+   "module": "pointInPolygon",
+   "exportsTs": "```ts\n// src/core/pointInPolygon.ts\nimport type { Coordinate, Polygon, MultiPolygon } from './geoTypes';\n\n/** 경계 판정 규칙. 현재 단일 케이스(좌하단 포함). Swift enum BoundaryRule 대응. */\nexport type BoundaryRule = 'leftBottomInclusive';\n\n/** Swift PointInPolygonConfig 대응. boundaryRule은 현재 알고리즘에서 분기하지 않음(API 형태 보존용). */\nexport interface PointInPolygonConfig {\n  boundaryRule: BoundaryRule;\n}\n\n/** Swift PointInPolygonConfig.default 대응. */\nexport const defaultPointInPolygonConfig: PointInPolygonConfig = {\n  boundaryRule: 'leftBottomInclusive',\n};\n\n/**\n * 점이 단일 Polygon 내부인지 판정 (crossing-number ray-cast, +x 방향 광선).\n * 외곽 링 안 && 어떤 홀에도 없음 → true. 경계 규칙: 좌하단(최소 lat/최소 lon 변) 포함.\n * Swift: pointInPolygon(_:in: Polygon, config:)\n */\nexport function pointInPolygon(\n  point: Coordinate,\n  polygon: Polygon,\n  config?: PointInPolygonConfig,\n): boolean;\n\n/**\n * 점이 MultiPolygon 내부인지 판정. 구성 폴리곤 중 하나라도(각자 홀 규칙) 내부면 true.\n * Swift: pointInPolygon(_:in: MultiPolygon, config:) — TS는 타입 오버로드 불가하므로 별도 이름.\n */\nexport function pointInMultiPolygon(\n  point: Coordinate,\n  multiPolygon: MultiPolygon,\n  config?: PointInPolygonConfig,\n): boolean;\n```",
+   "constants": [
+    "minRingVertices=3 (링 점 3개 미만이면 무조건 false — guard n >= 3)",
+    "defaultBoundaryRule='leftBottomInclusive'",
+    "epsilon=없음 (의도적 — 절대 추가 금지, half-open 비교 구조가 0 나눗셈을 배제)"
+   ],
+   "deps": [
+    "geoTypes"
+   ],
+   "testsToPort": [
+    {
+     "name": "testInteriorPointIsInside",
+     "asserts": "unitSquare outer(lat,lon)=(0,0),(0,1),(1,1),(1,0). 점(lat:0.5,lon:0.5) → true"
+    },
+    {
+     "name": "testExteriorPointIsOutside",
+     "asserts": "unitSquare. 점(2,2) → false"
+    },
+    {
+     "name": "testBottomEdgePointIsInside_leftBottomRule",
+     "asserts": "unitSquare. 아래변(최소 lat) 위 점(lat:0,lon:0.5) → true"
+    },
+    {
+     "name": "testLeftEdgePointIsInside",
+     "asserts": "unitSquare. 왼쪽변(최소 lon) 위 점(lat:0.5,lon:0) → true"
+    },
+    {
+     "name": "testTopEdgePointIsOutside",
+     "asserts": "unitSquare. 위변(최대 lat) 위 점(lat:1,lon:0.5) → false"
+    },
+    {
+     "name": "testRightEdgePointIsOutside",
+     "asserts": "unitSquare. 오른쪽변(최대 lon) 위 점(lat:0.5,lon:1) → false"
+    },
+    {
+     "name": "testBottomLeftCornerIsInside",
+     "asserts": "unitSquare. 꼭짓점(0,0) → true"
+    },
+    {
+     "name": "testTopRightCornerIsOutside",
+     "asserts": "unitSquare. 꼭짓점(1,1) → false"
+    },
+    {
+     "name": "testTopLeftCornerIsOutside",
+     "asserts": "unitSquare. 꼭짓점(lat:1,lon:0) → false (최대 lat)"
+    },
+    {
+     "name": "testBottomRightCornerIsOutside",
+     "asserts": "unitSquare. 꼭짓점(lat:0,lon:1) → false (최대 lon)"
+    },
+    {
+     "name": "testPointInHoleIsOutside",
+     "asserts": "squareWithHole: outer [0,4]² = (0,0),(0,4),(4,4),(4,0); hole [1,3]² = (1,1),(1,3),(3,3),(3,1). 점(2,2) → false"
+    },
+    {
+     "name": "testPointInOuterButOutsideHoleIsInside",
+     "asserts": "squareWithHole. 도넛 살 점(0.5,0.5) → true"
+    },
+    {
+     "name": "testPointOnHoleMinEdgeIsOutside",
+     "asserts": "squareWithHole. 홀의 최소 lat 변 위 점(lat:1,lon:2) → false (홀 좌하단 변은 '홀 내부'로 간주되어 제외)"
+    },
+    {
+     "name": "testPointOnHoleMaxEdgeIsInside",
+     "asserts": "squareWithHole. 홀의 최대 lat 변 위 점(lat:3,lon:2) → true"
+    },
+    {
+     "name": "testPointInFirstIslandIsInside",
+     "asserts": "twoIslands = MultiPolygon([0,1]² 사각형, [5,6]² 사각형). 점(0.5,0.5) → true. pointInMultiPolygon 사용"
+    },
+    {
+     "name": "testPointInSecondIslandIsInside",
+     "asserts": "twoIslands. 점(5.5,5.5) → true"
+    },
+    {
+     "name": "testPointBetweenIslandsIsOutside",
+     "asserts": "twoIslands. 점(3,3) → false"
+    },
+    {
+     "name": "testEmptyMultiPolygonIsOutside",
+     "asserts": "MultiPolygon(polygons: []). 점(0.5,0.5) → false"
+    },
+    {
+     "name": "testMultiPolygonAppliesPerIslandHoleRule",
+     "asserts": "archipelago = [squareWithHole, [10,11]² 사각형]. (2,2)→false(섬1 홀 안), (0.5,0.5)→true(섬1 도넛 살), (10.5,10.5)→true(섬2 내부)"
+    },
+    {
+     "name": "testConcaveInteriorPointIsInside",
+     "asserts": "concaveL outer(lat,lon)=(0,0),(0,3),(3,3),(3,2),(1,2),(1,0). 점(0.5,0.5) → true"
+    },
+    {
+     "name": "testConcaveNotchPointIsOutside",
+     "asserts": "concaveL. 파인 부분 점(lat:2,lon:0.5) → false"
+    },
+    {
+     "name": "testConcaveUpperArmPointIsInside",
+     "asserts": "concaveL. 위쪽 팔 점(2.5,2.5) → true"
+    },
+    {
+     "name": "testRayThroughVertexDoesNotDoubleCount_interior",
+     "asserts": "diamond outer(lat,lon)=(0,1),(1,2),(2,1),(1,0). y=1 광선이 좌우 꼭짓점 통과. 중심(1,1) → true (중복카운트 시 false로 오판)"
+    },
+    {
+     "name": "testRayThroughVertexDoesNotDoubleCount_exterior",
+     "asserts": "diamond. 같은 높이 외부 점(lat:1,lon:-1) → false"
+    },
+    {
+     "name": "testHorizontalEdgeRayDoesNotDoubleCount",
+     "asserts": "[0,2]² 사각형 (0,0),(0,2),(2,2),(2,0). 아래 수평변 높이 외부 점(lat:0,lon:-1)→false, 위 수평변 높이 외부 점(lat:2,lon:-1)→false"
+    },
+    {
+     "name": "testClosedRingSameAsOpenRing",
+     "asserts": "unitSquare에 첫 점(0,0)을 끝에 중복으로 붙인 5점 닫힌 링. (0.5,0.5)→true, (2,2)→false, 그리고 (0.5,0.5) 결과가 열린 unitSquare 결과와 동일(equal)"
+    },
+    {
+     "name": "testEmptyOuterIsOutside",
+     "asserts": "Polygon(outer: []). 점(0.5,0.5) → false"
+    },
+    {
+     "name": "testSinglePointOuterIsOutside",
+     "asserts": "outer=[(0,0)] 1점. 점(0,0) → false"
+    },
+    {
+     "name": "testTwoPointOuterIsOutside",
+     "asserts": "outer=[(0,0),(0,1)] 선분. 점(lat:0,lon:0.5) → false"
+    },
+    {
+     "name": "testDegenerateHoleIsIgnored",
+     "asserts": "[0,2]² outer + 2점짜리 degenerate 홀 [(1,1),(1,1.5)]. 점(lat:1,lon:1.2) → true (홀 무시)"
+    },
+    {
+     "name": "testWindingOrderIndependence",
+     "asserts": "CW 사각형 (0,0),(1,0),(1,1),(0,1). interior(0.5,0.5): CW 결과 == unitSquare(CCW) 결과 == true. exterior(2,2): 둘 다 false"
+    },
+    {
+     "name": "testDiamondSlantedEdgeBoundaryRuleIsDeterministic",
+     "asserts": "diamond 사선 변 중점: 좌하변(0.5,0.5)→true, 좌상변(1.5,0.5)→true, 우상변(1.5,1.5)→false, 우하변(0.5,1.5)→false. SSOT 핀고정 — 비교부호 변경 시 회귀 감지"
+    },
+    {
+     "name": "testDiamondApexVerticesAreDeterministic",
+     "asserts": "diamond 꼭짓점: 최저(0,1)→false, 최고(2,1)→false, 우측(1,2)→false, 좌측(1,0)→true (좌측 apex만 내부)"
+    },
+    {
+     "name": "testConfigAPIShapeSmoke",
+     "asserts": "unitSquare interior(0.5,0.5): config 생략 결과 == {boundaryRule:'leftBottomInclusive'} 명시 결과 (동작 비분기, API 형태만 검증)"
+    }
+   ],
+   "notes": "(1) 함수 오버로드: Swift는 Polygon/MultiPolygon 타입 오버로드 2개를 같은 이름 pointInPolygon으로 제공. TS는 런타임 타입 디스패치가 불안정하므로 pointInPolygon(Polygon용) + pointInMultiPolygon(MultiPolygon용) 두 이름으로 분리 권장 — 테스트의 `in: multiPolygon` 호출은 pointInMultiPolygon으로 매핑. (2) 핵심 산술을 byte-faithful로 보존: xIntersect = (vj.x - vi.x) * (p.y - vi.y) / (vj.y - vi.y) + vi.x — 연산 순서(곱→나눗셈→덧셈)와 결합을 그대로 유지해야 float64 비트 동일. (3) 비교 부호 절대 변경 금지: half-open `(vi.y > p.y) !== (vj.y > p.y)` (strict >, XOR는 !== 로), strict `p.x < xIntersect`. 이 조합이 좌하단 포함 경계 규칙·수평변 자동 제외·꼭짓점 1회 카운트·0 나눗셈 배제를 모두 구조적으로 만든다. epsilon이나 >= 추가는 회귀. (4) 루프 idiom: `var j = n-1; for i in 0..<n { ...; j = i }` — wraparound 변 (ring[j]→ring[i]) 순서 보존. `inside.toggle()` → `inside = !inside`. (5) planar 매핑 x=lon, y=lat 은 단일 지점(한 함수)에서만 변환 — lat/lon 스왑 버그 방지 설계 의도 보존. (6) Swift Polygon.holes는 비옵셔널 [[Coordinate]] (기본 [] 추정). geoTypes의 TS Polygon.holes가 optional이면 `polygon.holes ?? []`로 처리하되, geoTypes 계약이 필수 배열이면 그대로 순회. MultiPolygon `.contains { }` → `.some()` (단락 평가 동일). (7) config 파라미터는 런타임 분기 없음(단일 enum 케이스) — optional 파라미터로 API 형태만 유지, 본문에서 미사용이어도 제거하지 말 것(향후 규칙 확장 대비 + 테스트 스모크 대상). (8) Date/시간/정수 나눗셈/정렬/IO 없음 — 순수 함수라 경계 분리 불필요. ringContains는 private 유지(내부 함수, export 안 함)."
+  },
+  {
+   "key": "photoTime",
+   "ts": "src/core/photoTime.ts",
+   "module": "photoTime",
+   "exportsTs": "// src/core/photoTime.ts\nimport type { Coordinate } from \"./geoTypes\";\n\n/** Swift ClosedRange<Double> 대응 — 양 끝 경계 포함(>=, <=) */\nexport interface ClosedRange {\n  readonly min: number;\n  readonly max: number;\n}\n\n/** 타임존 결정 임계값/설정. 모든 오프셋은 \"UTC 동쪽 양수\" 초 단위. */\nexport interface TZConfig {\n  /** 한국 bbox 위도 닫힌 구간. 기본 {min: 33.0, max: 38.9} */\n  koreaLatRange: ClosedRange;\n  /** 한국 bbox 경도 닫힌 구간. 기본 {min: 124.6, max: 132.0} */\n  koreaLonRange: ClosedRange;\n  /** bbox 내부일 때 고정 오프셋(초). KST +9h = 32400, DST 없음 */\n  koreaOffsetSeconds: number;\n}\n\n/** Swift `TZConfig()` 기본 생성자 대응. 호출마다 새 객체 반환(변이 안전). */\nexport function defaultTZConfig(): TZConfig {\n  return {\n    koreaLatRange: { min: 33.0, max: 38.9 },\n    koreaLonRange: { min: 124.6, max: 132.0 },\n    koreaOffsetSeconds: 32400,\n  };\n}\n\n/**\n * 우선순위: 1차 한국 bbox(경계 포함, coordinate null이면 건너뜀)\n *        → 2차 exifOffsetSeconds(null 아니면 그 값, 0도 유효)\n *        → 3차 deviceOffsetSeconds.\n */\nexport function tzOffset(\n  coordinate: Coordinate | null,\n  exifOffsetSeconds: number | null,\n  deviceOffsetSeconds: number,\n  config?: TZConfig // 생략 시 defaultTZConfig()\n): number;\n\n/** Swift 명명 튜플 (hourOfDay, year, month, day) 대응 */\nexport interface LocalComponents {\n  /** 시(時) 컴포넌트, 항상 [0, 24) 정수. 분/초 버림 */\n  hourOfDay: number;\n  year: number;\n  month: number; // 1-12\n  day: number;   // 1-31\n}\n\n/**\n * epochSeconds: Swift Date.timeIntervalSince1970 대응 (UTC epoch 초, number).\n * epoch + tzOffsetSeconds 를 그대로 UTC 그레고리력으로 읽는 순수 정수 산술.\n * JS Date 메서드(getHours 등) 사용 금지 — floorDiv/floorMod + civil-from-days 로 구현.\n */\nexport function localComponents(\n  epochSeconds: number,\n  tzOffsetSeconds: number\n): LocalComponents;",
+   "constants": [
+    "koreaLatRange.min=33.0",
+    "koreaLatRange.max=38.9",
+    "koreaLonRange.min=124.6",
+    "koreaLonRange.max=132.0",
+    "koreaOffsetSeconds=32400",
+    "(내부 구현용) SECONDS_PER_DAY=86400",
+    "(내부 구현용) SECONDS_PER_HOUR=3600"
+   ],
+   "deps": [
+    "geoTypes"
+   ],
+   "testsToPort": [
+    {
+     "name": "testSeoulInsideKoreaBBox_returnsKST",
+     "asserts": "tzOffset({lat:37.5665, lon:126.978}, exif=7200, device=0) === 32400 — 한국 bbox가 EXIF/디바이스보다 우선"
+    },
+    {
+     "name": "testParisOutsideKorea_withExif_returnsExif",
+     "asserts": "tzOffset({lat:48.85, lon:2.35}, exif=3600, device=32400) === 3600"
+    },
+    {
+     "name": "testOutsideKorea_exifNil_returnsDevice",
+     "asserts": "tzOffset({lat:48.85, lon:2.35}, exif=null, device=32400) === 32400"
+    },
+    {
+     "name": "testNilCoordinate_withExif_returnsExif",
+     "asserts": "tzOffset(null, exif=3600, device=32400) === 3600 — 좌표 null이면 1차 건너뜀"
+    },
+    {
+     "name": "testNilCoordinate_exifNil_returnsDevice",
+     "asserts": "tzOffset(null, exif=null, device=-18000) === -18000 — 음수 디바이스 오프셋 그대로"
+    },
+    {
+     "name": "testKoreaBBoxExactCorners_inclusive_returnKST",
+     "asserts": "네 모서리 (33.0,124.6), (38.9,132.0), (33.0,132.0), (38.9,124.6) 각각 exif=3600, device=0 으로 호출 시 모두 32400 — 닫힌 구간 경계 포함 검증"
+    },
+    {
+     "name": "testKoreaBBoxJustOutside_fallsBackToExif",
+     "asserts": "(32.999, 126.0) → 3600, (36.0, 132.001) → 3600 (exif=3600, device=0) — 경계 epsilon 바깥은 exif 폴백"
+    },
+    {
+     "name": "testCustomConfig_overridesBBoxAndOffset",
+     "asserts": "config={lat 35.0..36.0, lon 139.0..140.0, offset 12345} 주입 시: 서울(37.5665,126.978, exif=3600, device=0) → 3600 (새 bbox 밖), 도쿄근처(35.6,139.7, exif=3600, device=0) → 12345 (새 bbox 안)"
+    },
+    {
+     "name": "testLocalComponents_sameDay",
+     "asserts": "epoch=1767276000 (2026-01-01T14:00:00Z), offset=32400 → {hourOfDay:23, year:2026, month:1, day:1}"
+    },
+    {
+     "name": "testLocalComponents_forwardRollover",
+     "asserts": "epoch=1767283200 (2026-01-01T16:00:00Z), offset=32400 → {hourOfDay:1, year:2026, month:1, day:2} — 익일 롤오버"
+    },
+    {
+     "name": "testLocalComponents_backwardRollover_negativeOffset",
+     "asserts": "epoch=1767232800 (2026-01-01T02:00:00Z), offset=-18000 → {hourOfDay:21, year:2025, month:12, day:31} — 연/월/일 모두 역방향 롤백"
+    },
+    {
+     "name": "testLocalComponents_halfHourOffset",
+     "asserts": "epoch=1780862400 (2026-06-07T20:00:00Z), offset=19800 (+5:30) → {hourOfDay:1, year:2026, month:6, day:8} — 현지 01:30, 분은 버림"
+    },
+    {
+     "name": "testLocalComponents_negativeHalfHour_backwardRolloverAcrossYear",
+     "asserts": "epoch=1767236400 (2026-01-01T03:00:00Z), offset=-19800 (-5:30) → {hourOfDay:21, year:2025, month:12, day:31} — 현지 21:30, 음수+반시간대+연경계 동시"
+    },
+    {
+     "name": "testLocalComponents_hourInRange",
+     "asserts": "epoch=1767225600 (2026-01-01T00:00:00Z), offset=32400 → hourOfDay===9 그리고 0 <= hourOfDay < 24 범위 단언"
+    }
+   ],
+   "notes": "함정 목록: (1) exifOffsetSeconds 옵셔널 — Swift `if let exif` 은 0도 통과시킨다. TS에서 truthy 체크(`if (exif)`) 금지, 반드시 `exif !== null && exif !== undefined` (또는 `!= null`)로 판정. exif=0(UTC)이 유효값. (2) bbox 경계는 ClosedRange.contains — 양 끝 포함(>=, <=). 부등호 방향/포함 여부를 절대 바꾸지 말 것. 판정 순서도 lat 먼저, lon 다음(부작용 없으니 결과 동일하지만 byte-faithful 유지). (3) localComponents 는 JS Date 의 getHours/getFullYear 등 로컬 타임존 메서드 절대 금지. 구현: shifted = epochSeconds + tzOffsetSeconds 후 floorDiv(shifted, 86400)로 days, floorMod(shifted, 86400)로 secOfDay, hour = Math.floor(secOfDay/3600), days→(y,m,d)는 Hinnant civil-from-days 알고리즘. 음수 shifted(1970 이전/큰 음수 오프셋)에서 JS `%` 는 음수를 반환하므로 floorMod = ((a % n) + n) % n 필수, floorDiv = Math.floor(a / n). (4) Swift Date.timeIntervalSince1970 은 Double — TS 시그니처도 number(소수 허용). 테스트는 정수 초만 사용하지만, 소수 입력 시 Swift Calendar 는 컴포넌트를 내림(truncate)하므로 추출 전 Math.floor(shifted) 적용이 동등 동작. (5) Swift ClosedRange<Double> → TS {min, max} 객체로 표현(튜플보다 명시적). TZConfig 기본값은 함수 defaultTZConfig()로 — 모듈 레벨 공유 상수 객체로 두면 테스트(testCustomConfig)처럼 변이하는 호출자가 기본값을 오염시킬 수 있음. (6) 반환 명명 튜플 (hourOfDay, year, month, day) → LocalComponents 객체로. (7) tzOffset 의 config 기본 인자: `config: TZConfig = defaultTZConfig()` 패턴. (8) 테스트 헬퍼 utcDate 는 epoch 정수를 하드코딩하거나 Date.UTC(y, mo-1, d, h, mi, s)/1000 사용 가능(Date.UTC 는 타임존 비의존이라 결정적, 단 month 가 0-based 인 점 주의). 프로덕션 코드에는 Date 사용 금지. (9) 이 모듈은 dataActorReconcile 이 아니므로 reconcile 관련 제외 지침은 해당 없음. (10) Coordinate 는 geoTypes 의 {lat, lon} 을 import — 로컬 재정의 금지."
+  },
+  {
+   "key": "mapProjection",
+   "ts": "src/core/mapProjection.ts",
+   "module": "mapProjection",
+   "exportsTs": "```ts\n// src/core/mapProjection.ts\nimport type { Coordinate } from \"./geoTypes\";\n\n/** CGPoint 대응. 화면 좌표(pt). */\nexport interface ScreenPoint {\n  x: number;\n  y: number;\n}\n\n/**\n * 등거리 정투영 파라미터.\n * 좌표계 규약(SSOT): 원점 = bbox 좌상단 (minLon, maxLat) → (0,0).\n * x: 동(+lon) → 오른쪽. y: Y반전 — 북(maxLat)이 y=0, 남쪽으로 y 증가.\n */\nexport interface ProjectionConfig {\n  /** bbox 서단 경도(도). 화면 x=0 기준. */\n  minLon: number;\n  /** bbox 북단 위도(도). 화면 y=0 기준(Y반전 기준점). */\n  maxLat: number;\n  /** 경도 cos 보정 기준 위도(도). 기본 36.0(한국 중심). */\n  refLat: number;\n  /** 균일 스케일(pt/도). 0이면 unproject 비가역 → null. */\n  scale: number;\n}\n\n/** Swift init 기본값 refLat=36.0 대응 팩토리. */\nexport function makeProjectionConfig(args: {\n  minLon: number;\n  maxLat: number;\n  refLat?: number; // 생략 시 DEFAULT_REF_LAT(36.0)\n  scale: number;\n}): ProjectionConfig {\n  return {\n    minLon: args.minLon,\n    maxLat: args.maxLat,\n    refLat: args.refLat ?? DEFAULT_REF_LAT,\n    scale: args.scale,\n  };\n}\n\nexport const DEFAULT_REF_LAT = 36.0;\n\n/** Swift computed var lonScaleFactor 대응: cos(refLat° → rad). */\nexport function lonScaleFactor(config: ProjectionConfig): number {\n  return Math.cos((config.refLat * Math.PI) / 180.0);\n}\n\n/**\n * 정투영(전사·total).\n * x = (lon − minLon) · cos(refLat°) · scale\n * y = (maxLat − lat) · scale\n */\nexport function project(coordinate: Coordinate, config: ProjectionConfig): ScreenPoint {\n  const x = (coordinate.lon - config.minLon) * lonScaleFactor(config) * config.scale;\n  const y = (config.maxLat - coordinate.lat) * config.scale;\n  return { x, y };\n}\n\n/**\n * 역투영. project의 정확한 역연산.\n * lon = x / (cos(refLat°)·scale) + minLon ; lat = maxLat − y / scale\n * 비가역 방어: scale === 0 또는 lonDenom === 0 이면 null (Swift nil 대응).\n */\nexport function unproject(point: ScreenPoint, config: ProjectionConfig): Coordinate | null {\n  const lonDenom = lonScaleFactor(config) * config.scale;\n  if (config.scale === 0 || lonDenom === 0) return null;\n  const lon = point.x / lonDenom + config.minLon;\n  const lat = config.maxLat - point.y / config.scale;\n  return { lat, lon };\n}\n```",
+   "constants": [
+    "DEFAULT_REF_LAT=36.0 (ProjectionConfig.refLat 기본값, 한국 중심 위도)",
+    "도→라디안 변환 계수 = π/180 (lonScaleFactor 내부 인라인, 별도 상수 불필요하나 식 그대로 보존)"
+   ],
+   "deps": [
+    "geoTypes"
+   ],
+   "testsToPort": [
+    {
+     "name": "roundTripScreenWithinOnePixel",
+     "asserts": "cfg={minLon:124.5, maxLat:38.7, refLat:36.0, scale:1000}(이하 koreaConfig). 서울 c={lat:37.5663, lon:126.9779}. p=project(c) → back=unproject(p)(non-null 단언) → rep=project(back). |rep.x−p.x|<1.0, |rep.y−p.y|<1.0. 참고: p≈(x:2004.8003..., y:1133.7)"
+    },
+    {
+     "name": "roundTripGeoWithinEpsilon",
+     "asserts": "koreaConfig. 부산 c={lat:35.1796, lon:129.0756}. back=unproject(project(c)) non-null, |back.lat−35.1796|<1e-9, |back.lon−129.0756|<1e-9"
+    },
+    {
+     "name": "topLeftCornerMapsToOrigin",
+     "asserts": "koreaConfig. c={lat:38.7, lon:124.5}(=maxLat,minLon) → project 결과 |x−0|<1e-9, |y−0|<1e-9"
+    },
+    {
+     "name": "bottomRightCornerMapsToExpectedExtremes",
+     "asserts": "koreaConfig. c={lat:33.0, lon:132.0}. expectedX=(132.0−124.5)*Math.cos(36*Math.PI/180)*1000 (≈6067.627457812106), expectedY=(38.7−33.0)*1000=5700.000000000001 근방(38.7−33.0의 float 결과 그대로 식으로 계산). |p.x−expectedX|<1e-9, |p.y−expectedY|<1e-9. 추가: Math.cos(36°rad)<1.0 단언"
+    },
+    {
+     "name": "uniformScaleWithLongitudeCosineCorrection",
+     "asserts": "koreaConfig. base={36.0,126.0}, east={36.0,127.0}, south={35.0,126.0}. dx=pEast.x−pBase.x, dy=pSouth.y−pBase.y. |dx − dy*Math.cos(36*Math.PI/180)|<1e-9 (dx≈809.0169943749475), |dy−1000|<1e-9"
+    },
+    {
+     "name": "yAxisInvertedNorthIsUp",
+     "asserts": "koreaConfig. north={38.0,127.0}→y=700, south={34.0,127.0}→y=4700. pNorth.y < pSouth.y (strict)"
+    },
+    {
+     "name": "unprojectReturnsNilWhenScaleZero",
+     "asserts": "cfg={minLon:124.5, maxLat:38.7, refLat:36.0, scale:0}. project({lat:35.0,lon:128.0}) → |x|<1e-9, |y|<1e-9 (전사: (0,0)으로 붕괴). unproject({x:10,y:10}) === null"
+    },
+    {
+     "name": "cosFactorReadsFromConfigNotHardcoded",
+     "asserts": "c={lat:38.7, lon:126.0}. cfgA: refLat=0, minLon=124.5, maxLat=38.7, scale=1000 → xA, |xA − (126.0−124.5)*Math.cos(0)*1000(=1500)|<1e-9. cfgB: refLat=60 동일 → xB, |xB − 1.5*Math.cos(60*Math.PI/180)*1000(≈750.0000000000001)|<1e-9. 그리고 |xA−xB|>1e-6 (XCTAssertNotEqual accuracy 의미: 차이가 1e-6 초과)"
+    },
+    {
+     "name": "zeroWidthBboxProjectsXToZeroAndRoundTrips",
+     "asserts": "cfg={minLon:127.0, maxLat:38.7, refLat:36.0, scale:1000}. c={lat:36.0, lon:127.0}(minLon 직상) → |p.x−0|<1e-9. back=unproject(p) non-null, |back.lat−36.0|<1e-9, |back.lon−127.0|<1e-9"
+    }
+   ],
+   "notes": "포팅 함정: (1) CGPoint→ScreenPoint{x,y} plain object. macOS CGFloat=Double이므로 정밀도 손실 없음 — Swift의 Double(point.x) 캐스트는 TS에서 no-op. (2) unproject의 Coordinate? → Coordinate | null (예외 throw 금지, 옵셔널→null 그대로). guard 두 조건 모두 보존: scale === 0 || lonDenom === 0. lonDenom 체크는 cos(refLat°)*scale 곱이 정확히 0인 경우용 — float64에서 -0도 ===0이 true이므로 Swift(-0.0==0 → nil)와 동일 동작. NaN scale은 두 언어 모두 가드를 통과해 NaN 좌표 반환 — 그대로 둔다(byte-faithful). (3) lonScaleFactor는 Swift computed var → 매 호출 재계산하는 순수 함수로 포팅(캐싱 금지, 결과 동일). (4) refLat 기본값 36.0은 Swift init 기본 인자 — TS interface에는 기본값이 없으므로 makeProjectionConfig 팩토리(refLat ?? 36.0)로 경계 보존. 테스트는 전부 refLat 명시 주입이라 팩토리 기본값 자체 테스트는 없음(SSOT 회귀 테스트 cosFactorReadsFromConfig가 하드코딩 방지를 잠금). (5) Math.cos vs Swift cos: 동일 IEEE754 double, 테스트 허용오차 1e-9라 ulp 차이 무관. 기대값은 리터럴 하드코딩 대신 테스트 안에서 같은 식(Math.cos(36*Math.PI/180) 등)으로 재계산할 것 — Swift 테스트도 식으로 계산함. (6) XCTAssertEqual(a,b,accuracy:e) → |a−b|<=e (Jest: expect(Math.abs(a−b)).toBeLessThanOrEqual(e) 또는 toBeCloseTo 대신 명시적 abs 비교 권장), XCTAssertNotEqual(accuracy:1e-6) → |xA−xB|>1e-6, XCTUnwrap → null 체크 후 사용. (7) Date/정수산술/정렬/IO 전혀 없음 — 완전 순수 모듈. 의존은 geoTypes의 Coordinate{lat,lon}뿐. (이 카드의 dataActorReconcile 제외 규칙은 본 모듈과 무관 — 해당 없음.)"
+  },
+  {
+   "key": "mapViewport",
+   "ts": "src/core/mapViewport.ts",
+   "module": "mapViewport",
+   "exportsTs": "```ts\n// src/core/mapViewport.ts\n// 화면 평면 줌/팬 뷰포트 변환 (순수·결정적). geo 좌표가 아닌 \"화면 점\" 공간.\n// 변환식(SSOT): final = zoom·(base − center) + center + pan\n\n/** CGPoint 대응 — 화면 점 */\nexport interface Point2D {\n  x: number;\n  y: number;\n}\n\n/** CGSize 대응 — 화면 평행이동(pan). Swift 필드명 width/height 유지 */\nexport interface Size2D {\n  width: number;\n  height: number;\n}\n\n/** CGAffineTransform 대응: 점 적용식 x' = a·x + c·y + tx, y' = b·x + d·y + ty */\nexport interface AffineTransform {\n  a: number;\n  b: number;\n  c: number;\n  d: number;\n  tx: number;\n  ty: number;\n}\n\n/** MapViewport struct 대응 (Equatable·Sendable → plain immutable interface) */\nexport interface MapViewport {\n  /** 배율(≥1 권장, 1=원본). 균일(가로·세로 동일) */\n  zoom: number;\n  /** 화면 평행이동(점) */\n  pan: Size2D;\n  /** 줌 고정점(보통 뷰 중앙). pan=0이면 zoom과 무관하게 제자리 */\n  center: Point2D;\n}\n\nexport function makeMapViewport(zoom: number, pan: Size2D, center: Point2D): MapViewport {\n  return { zoom, pan, center };\n}\n\n/**\n * base(zoom1) 화면점 → 최종 화면점으로 보내는 affine.\n * 닫힌형: a = d = zoom, b = c = 0,\n *         tx = center.x + pan.width  − zoom·center.x,\n *         ty = center.y + pan.height − zoom·center.y\n * (Swift의 translatedBy(cx+pw, cy+ph) → scaledBy(z,z) → translatedBy(−cx,−cy) 합성과 동일)\n */\nexport function viewportAffine(vp: MapViewport): AffineTransform;\n\n/** base 화면점 → 최종 화면점 (렌더가 그리는 위치). point.applying(affine) 대응 */\nexport function applyViewport(vp: MapViewport, point: Point2D): Point2D;\n\n/** 최종 화면점(탭 위치) → base 화면점. point.applying(affine.inverted()) 대응 */\nexport function invertViewport(vp: MapViewport, point: Point2D): Point2D;\n\n/** Equatable 대응: zoom/pan/center 전 필드 === 비교 (NaN≠NaN, −0===0 — Swift Double ==와 동일 의미) */\nexport function viewportEquals(a: MapViewport, b: MapViewport): boolean;\n```",
+   "constants": [
+    "(모듈 상수 없음 — 임계값/매직넘버 부재)",
+    "테스트 전용: assertPoint 기본 허용오차 accuracy=1e-9",
+    "테스트 전용: round-trip 허용오차 accuracy=1e-6"
+   ],
+   "deps": [],
+   "testsToPort": [
+    {
+     "name": "identityWhenNoZoomNoPan",
+     "asserts": "vp = {zoom:1, pan:(0,0), center:(50,50)}. 점 (0,0), (30,70), (50,50) 각각에 대해 apply(p)==p 그리고 invert(p)==p (허용오차 1e-9)"
+    },
+    {
+     "name": "centerIsFixedPointUnderZoom",
+     "asserts": "zoom ∈ [1, 2, 5, 12], pan=(0,0), center=(50,50). 모든 zoom에서 apply((50,50)) == (50,50) (1e-9)"
+    },
+    {
+     "name": "concreteZoomValues",
+     "asserts": "vp = {zoom:2, pan:(0,0), center:(50,50)}. apply((0,0)) == (−50,−50), apply((100,100)) == (150,150) (1e-9)"
+    },
+    {
+     "name": "panIsPlainTranslation",
+     "asserts": "vp = {zoom:1, pan:(width:10, height:−20), center:(50,50)}. apply((30,40)) == (40,20) (1e-9)"
+    },
+    {
+     "name": "invertIsInverseOfApply",
+     "asserts": "4개 케이스 (zoom, pan, center): (2,(30,−10),(50,50)), (5,(−100,80),(160,320)), (12,(0,0),(0,0)), (1.7,(12.5,7.25),(200,100)). 각 케이스 × 점 (0,0), (137,42), (−20,999)에 대해 invert(apply(p)) ≈ p (허용오차 1e-6)"
+    },
+    {
+     "name": "applyIsInverseOfInvert",
+     "asserts": "vp = {zoom:3, pan:(25,−40), center:(50,50)}, p=(88,17). apply(invert(p)) ≈ p (허용오차 1e-6)"
+    }
+   ],
+   "notes": "함정: (1) CGAffineTransform 합성 의미 — Swift의 translatedBy/scaledBy는 새 변환을 prepend하므로 점에는 「−center → ×zoom → +center+pan」 순서로 적용된다. CG 행렬 합성을 그대로 흉내내지 말고 닫힌형(a=d=zoom, b=c=0, tx=cx+pw−z·cx, ty=cy+ph−z·cy)으로 affine을 만들되, apply/invert는 그 affine 행렬을 통해 계산하라(렌더·히트테스트가 같은 행렬을 공유하는 SSOT 설계를 보존). (2) invert는 affine.inverted() 경유 — 닫힌형 역변환은 x=(x'−tx)/zoom. zoom=0이면 특이행렬인데 Swift CGAffineTransform.inverted()는 비가역 시 원본 행렬을 그대로 반환한다(byte-faithful이 필요하면 zoom===0일 때 점을 그대로 반환; 테스트는 이 엣지를 다루지 않으므로 zoom≠0 전제조건 주석으로 충분하나 선택을 notes에 남길 것). (3) CGFloat은 64bit Double = JS number이므로 정밀도 차이 없음. Date/정수 산술/정렬/옵셔널 전부 없음 — 가장 안전한 모듈. (4) pan의 CGSize 필드명 width/height를 유지할 것({x,y}로 바꾸지 말 것 — 호출부 포팅 시 혼동 방지). (5) 테스트 헬퍼 assertPoint는 XCTAssertEqual(accuracy:) 의미론, 즉 |a−b| <= accuracy 절대오차 비교 — Vitest/Jest의 toBeCloseTo(소수점 자릿수 기반)를 쓰지 말고 Math.abs(a−b) <= accuracy 커스텀 헬퍼로 포팅. (6) Equatable 합성 ==는 필드별 Double == — JS ===와 의미 일치(NaN≠NaN, −0===0). (7) 이 모듈은 geo 좌표를 다루지 않아 geoTypes 의존 없음. Point2D/Size2D/AffineTransform이 mapProjection의 화면 점 타입과 겹친다면 한쪽(예: mapViewport)에서 정의하고 다른 쪽이 import하도록 중복 제거 권장. (참고: dataActorReconcile 제외 지침은 본 모듈과 무관)"
+  },
+  {
+   "key": "geojsonDecode",
+   "ts": "src/core/geojsonDecode.ts",
+   "module": "geojsonDecode",
+   "exportsTs": "```ts\n// src/core/geojsonDecode.ts\nimport type { Coordinate, Polygon, MultiPolygon } from \"./geoTypes\";\n\n/** 코드 프로퍼티 키 — 시군구('sgg') / 시도('sido'). geojson마다 한쪽만 존재. */\nexport type CodeKey = \"sgg\" | \"sido\";\n\n/**\n * 경계 분리: Swift의 `Data + JSONDecoder` 대신 JSON.parse 결과(unknown)를 받는다.\n * JSONDecoder의 구조 검증(throws)을 이 함수가 대신 수행한다.\n *\n * GeoJSON FeatureCollection → { code → MultiPolygon }.\n * - \"Polygon\"은 MultiPolygon(폴리곤 1개)으로 정규화\n * - codeKey 키가 없는 feature는 스킵\n * - 좌표 [lon, lat] → Coordinate{lat: pair[1], lon: pair[0]}\n * - 첫 ring = outer, 나머지 ring = holes\n * - 구조가 GeoJSON 스키마와 다르면 throw (Swift DecodingError 대응)\n */\nexport function polygonsFromGeoJSON(\n  json: unknown,\n  codeKey: CodeKey = \"sgg\",\n): Map<string, MultiPolygon>;\n\n/** 시군구('sgg') 전용 래퍼 — Swift `polygonsBySgg(from:)` 대응. */\nexport function polygonsBySgg(json: unknown): Map<string, MultiPolygon> {\n  return polygonsFromGeoJSON(json, \"sgg\");\n}\n\n// ── 내부 구조 타입(검증 후의 형태 문서화용 — Swift Decodable struct 대응) ──\n// 다른 모듈이 import할 필요는 없으나, 테스트 픽스처 타이핑 편의를 위해 export 허용.\nexport interface GeoJSONFeatureCollection { features: GeoJSONFeature[]; }\nexport interface GeoJSONFeature {\n  properties: GeoJSONProperties;\n  geometry: GeoJSONGeometry;\n}\nexport interface GeoJSONProperties {\n  /** 5자리 MOIS SIG_CD — 시도 geojson엔 없음 */\n  sgg?: string | null;\n  /** 2자리 시도 코드 — 시군구 geojson엔 없음 */\n  sido?: string | null;\n}\nexport interface GeoJSONGeometry {\n  type: string; // \"Polygon\" | \"MultiPolygon\" | 기타(기타면 빈 MultiPolygon)\n  coordinates?: unknown;\n}\n```",
+   "constants": [
+    "codeKeyDefault='sgg'",
+    "geometryTypePolygon=\"Polygon\"",
+    "geometryTypeMultiPolygon=\"MultiPolygon\"",
+    "propertyKeySgg=\"sgg\"",
+    "propertyKeySido=\"sido\""
+   ],
+   "deps": [
+    "geoTypes"
+   ],
+   "testsToPort": [
+    {
+     "name": "polygonNormalizedToMultiPolygon (신규 — Swift 직접 테스트 없음)",
+     "asserts": "픽스처: {features:[{properties:{sgg:'11110'},geometry:{type:'Polygon',coordinates:[[[126.97,37.57],[126.99,37.57],[126.99,37.60],[126.97,37.57]]]}}]} → map.size===1, get('11110').polygons.length===1, outer.length===4, outer[0]==={lat:37.57,lon:126.97} (lon/lat 스왑 검증 — 가장 흔한 버그 지점)"
+    },
+    {
+     "name": "multiPolygonPreservesOrderAndCount",
+     "asserts": "type:'MultiPolygon', coordinates=폴리곤 2개(A: 첫 점 [126.5,37.0], B: 첫 점 [129.0,35.1]) → polygons.length===2, polygons[0].outer[0].lon===126.5, polygons[1].outer[0].lon===129.0 (입력 순서 보존)"
+    },
+    {
+     "name": "firstRingIsOuterRestAreHoles",
+     "asserts": "Polygon에 ring 3개(ring0=외곽 4점, ring1·ring2=구멍 각 4점) → outer===ring0 스왑매핑, holes.length===2, holes[0][0]==={lat:ring1[0][1], lon:ring1[0][0]}"
+    },
+    {
+     "name": "featureWithoutCodeKeySkipped",
+     "asserts": "codeKey='sgg'인데 properties:{sido:'11'}만 있는 feature 1개 → map.size===0 (guard-continue 스킵)"
+    },
+    {
+     "name": "sidoCodeKeyDecodesSidoGeojson",
+     "asserts": "동일 픽스처(properties:{sido:'11'})를 codeKey='sido'로 → '11' 키 존재; codeKey='sgg'로 → 없음"
+    },
+    {
+     "name": "unknownGeometryTypeYieldsEmptyMultiPolygonNotSkipped",
+     "asserts": "geometry:{type:'Point',coordinates:[127.0,37.5]}, properties:{sgg:'99999'} → map.has('99999')===true, polygons.length===0 (키는 들어가고 폴리곤만 빈 배열 — 스킵 아님, Swift default 분기 보존)"
+    },
+    {
+     "name": "duplicateCodeLastWins",
+     "asserts": "sgg:'11110' feature 2개(첫째 Polygon outer 4점, 둘째 outer 5점) → 결과 outer.length===5 (byCode[code]= 덮어쓰기, 마지막 승)"
+    },
+    {
+     "name": "polygonsBySggEqualsPolygonsWithSggKey",
+     "asserts": "동일 픽스처를 polygonsBySgg(json)과 polygonsFromGeoJSON(json,'sgg')로 → deep-equal"
+    },
+    {
+     "name": "emptyRingsPolygonYieldsEmptyOuter",
+     "asserts": "geometry:{type:'Polygon',coordinates:[]}, sgg:'11110' → polygons.length===1, polygons[0].outer.length===0, holes.length===0 (rings.first 없음 가드)"
+    },
+    {
+     "name": "emptyFeatureCollection",
+     "asserts": "{features:[]} → map.size===0"
+    },
+    {
+     "name": "malformedShapeThrows",
+     "asserts": "(1) {} (features 누락), (2) features 원소에 geometry 누락, (3) type:'Polygon'인데 coordinates:'oops'(문자열), (4) geometry.type 누락 — 각각 throw (Swift JSONDecoder DecodingError 대응)"
+    },
+    {
+     "name": "nullCodeTreatedAsAbsent",
+     "asserts": "properties:{sgg:null} (명시적 null) → 해당 feature 스킵, map.size===0 (Swift decodeIfPresent는 null/누락 모두 nil)"
+    }
+   ],
+   "notes": "함정: (1) lon/lat 스왑이 핵심 — GeoJSON pair는 [lon,lat]이고 Coordinate는 {lat:pair[1], lon:pair[0]}. 절대 뒤집지 말 것. (2) Swift 옵셔널 sgg/sido는 키 누락과 명시적 null 모두 nil → TS에선 undefined와 null 둘 다 '없음'으로 처리해 feature 스킵. (3) 알 수 없는 geometry type(\"Point\" 등)은 스킵이 아니라 빈 MultiPolygon(polygons:[])으로 키가 들어감 — 이 미묘한 동작 보존 필수. (4) Swift Dictionary는 순서 없음 → TS는 Map 사용(get 미존재=undefined가 Swift 옵셔널 대응). 소비자(geoStores)가 순회 순서에 의존하면 안 됨. JS 객체/Map 모두 삽입순이라 결과적으로 결정적이긴 함. (5) Swift는 pair[1] 접근 시 원소 <2면 크래시(trap) — TS는 undefined가 조용히 들어가므로, 좌표 pair 길이<2 또는 비-number 원소면 명시적 throw 권장(조용한 NaN 전파 금지). (6) JSONDecoder의 구조 검증을 TS에서 직접 구현해야 함: features 배열, properties/geometry 객체, geometry.type 문자열, 선언된 type에 맞는 coordinates 중첩 깊이(Polygon=3겹, MultiPolygon=4겹) 검증 후 불일치 시 throw. (7) 숫자는 JSON.parse가 이미 float64 number — Swift Double과 동일, 변환 불필요. (8) 시간/정렬/임계값 로직 없음 — 순수 구조 변환이라 byte-faithful 리스크 낮음. 기본 인자 codeKey='sgg' 보존. (9) 간접 ground-truth(GeoDataStoreTests.swift, 실제 sigungu.geojson 자산 필요): 255 feature 전부 디코드, 신안군 46910=191 polygons, 옹진군 28720=77, 울릉군 47940=5, 종로구 11110=1(outer>=3, 첫 점 lat∈[37,38]·lon∈[126,128]) — 이 통합 테스트들은 geoStores 카드에서 포팅하되 본 디코더를 경유함. (10) Swift 원본의 reserveCapacity는 성능 힌트일 뿐 — TS에서 무시."
+  },
+  {
+   "key": "geoStores",
+   "ts": "src/core/geoDataStore.ts + src/core/displayGeoStore.ts + src/core/regionNames.ts",
+   "module": "geoStores",
+   "exportsTs": "```ts\n// ===== src/core/geoDataStore.ts =====\nimport type { MultiPolygon } from \"./geoTypes\";\nimport { polygonsByCode, type GeoJSONFeatureCollectionRaw } from \"./geojsonDecode\";\n\n/**\n * region_codes.json 한 엔트리. JSON 키와 1:1 (camelCase 그대로).\n * bbox = [minLon, minLat, maxLon, maxLat] — 경도 먼저.\n */\nexport interface RegionCodeEntry {\n  regionCode: string;        // MOIS SIG_CD(시군구) 또는 시도 코드\n  level: string;             // \"sido\" | \"sigungu\"\n  nameKo: string;\n  sidoCode: string;          // 소속 시도 코드(2자리)\n  bbox: number[];            // [minLon, minLat, maxLon, maxLat]\n}\n\n/**\n * 매칭용 원본 시군구 폴리곤 저장소(순수).\n * Swift init의 Bundle IO를 제거 — 파싱된 JSON을 인자로 받는다.\n * @param entries  JSON.parse(region_codes.json) 결과 (272개)\n * @param sigunguGeoJSON  JSON.parse(sigungu.geojson) 결과 (255 feature)\n */\nexport class GeoDataStore {\n  readonly entries: RegionCodeEntry[];\n  private readonly polygons: Map<string, MultiPolygon>;\n  constructor(entries: RegionCodeEntry[], sigunguGeoJSON: GeoJSONFeatureCollectionRaw);\n  /** 시군구 regionCode → MultiPolygon. 없으면(시도 코드 포함) undefined. */\n  polygon(regionCode: string): MultiPolygon | undefined;\n}\n\n// ===== src/core/displayGeoStore.ts =====\nimport type { MultiPolygon, BBox } from \"./geoTypes\";\nimport { polygonsByCode, type CodeKey, type GeoJSONFeatureCollectionRaw } from \"./geojsonDecode\";\n\n/** 표시 레벨 — Swift enum Level { sigungu, sido } 대응. */\nexport type DisplayLevel = \"sigungu\" | \"sido\";\n\n/**\n * 표시용(단순화) 폴리곤 저장소 — choropleth 렌더 전용. 매칭에 절대 사용 금지.\n * Swift는 level이 리소스 파일까지 선택했으나, IO 분리 후 파일 선택은 로더 몫:\n *   level=\"sigungu\" ↔ sigungu_display.geojson(codeKey \"sgg\"),\n *   level=\"sido\"    ↔ sido_display.geojson(codeKey \"sido\").\n */\nexport class DisplayGeoStore {\n  /** regionCode → 표시용 MultiPolygon. */\n  readonly polygons: Map<string, MultiPolygon>;\n  /** 전 폴리곤 outer ring 합집합 bbox (투영 fit용). */\n  readonly bbox: BBox;\n  constructor(geojson: GeoJSONFeatureCollectionRaw, level?: DisplayLevel); // default \"sigungu\"\n}\n\n// (내부) 모든 outer ring에서 min/max 누적. holes 미사용. 10줄 이하라 본문 포함 가능:\n// function computeBBox(polygons: Map<string, MultiPolygon>): BBox {\n//   let minLat = Number.MAX_VALUE, minLon = Number.MAX_VALUE;\n//   let maxLat = -Number.MAX_VALUE, maxLon = -Number.MAX_VALUE;\n//   for (const mp of polygons.values())\n//     for (const poly of mp.polygons)\n//       for (const c of poly.outer) {\n//         minLat = Math.min(minLat, c.lat); minLon = Math.min(minLon, c.lon);\n//         maxLat = Math.max(maxLat, c.lat); maxLon = Math.max(maxLon, c.lon);\n//       }\n//   return { minLat, minLon, maxLat, maxLon };\n// }\n\n// ===== src/core/regionNames.ts =====\nimport type { RegionCodeEntry } from \"./geoDataStore\";\n\n/**\n * regionCode → 표시명 사전(순수). 시군구=\"시도약칭 시군구명\"(\"부산 연제구\"), 시도=nameKo 그대로.\n * 11MB 폴리곤 없이 region_codes.json만으로 동작.\n */\nexport class RegionNames {\n  readonly names: Map<string, string>;\n  constructor(entries: RegionCodeEntry[]); // JSON.parse(region_codes.json) 결과\n}\n\n/**\n * 시도 약칭 — 행정 접미사 제거. Swift static func shorten 대응 (테스트가 직접 호출).\n * 접미사 검사 순서가 로직의 일부: \"특별자치도\"가 \"도\"보다 먼저.\n */\nexport function shorten(sido: string): string;\n// 본문 (10줄 이하):\n// for (const suffix of SIDO_SUFFIXES)\n//   if (sido.endsWith(suffix)) return sido.slice(0, sido.length - suffix.length);\n// return sido;\n```",
+   "constants": [
+    "SIDO_SUFFIXES=[\"특별자치도\",\"특별자치시\",\"특별시\",\"광역시\",\"도\"] (배열 순서 보존 필수 — \"특별자치도\"가 \"도\"보다 먼저)",
+    "LEVEL_SIGUNGU=\"sigungu\"",
+    "LEVEL_SIDO=\"sido\"",
+    "codeKey 매핑: sigungu→\"sgg\", sido→\"sido\"",
+    "DisplayGeoStore level 기본값=\"sigungu\"",
+    "computeBBox 초기값: min=+Number.MAX_VALUE, max=-Number.MAX_VALUE (Swift Double.greatestFiniteMagnitude와 동일, Infinity 아님)",
+    "리소스 파일명(로더 측): region_codes.json / sigungu.geojson / sigungu_display.geojson / sido_display.geojson",
+    "ground-truth(테스트용): 총 272 엔트리 = 255 sigungu + 17 sido, 신안군 46910=191 polygons, 옹진군 28720=77, 울릉군 47940=5, 종로구 11110=1",
+    "디코드 성능 임계값=2.0초 (perf 테스트)"
+   ],
+   "deps": [
+    "geoTypes",
+    "geojsonDecode"
+   ],
+   "testsToPort": [
+    {
+     "name": "geoDataStore: initDoesNotThrow",
+     "asserts": "실제 픽스처(region_codes.json + sigungu.geojson)를 JSON.parse 후 new GeoDataStore(...)가 throw하지 않음"
+    },
+    {
+     "name": "geoDataStore: entryCounts",
+     "asserts": "entries.length === 272; level==='sigungu' 필터 === 255개; level==='sido' 필터 === 17개"
+    },
+    {
+     "name": "geoDataStore: sigunguPolygonCount",
+     "asserts": "sigungu 엔트리 255개 전부에 대해 store.polygon(entry.regionCode) !== undefined → 디코드된 폴리곤 수 === 255"
+    },
+    {
+     "name": "geoDataStore: regionCodeEntryFields",
+     "asserts": "regionCode '11110'(종로구) 엔트리: level==='sigungu', nameKo==='종로구', sidoCode==='11', bbox.length===4, bbox[0]<bbox[2] (minLon<maxLon), bbox[1]<bbox[3] (minLat<maxLat)"
+    },
+    {
+     "name": "geoDataStore: shinanMultiPolygonCount",
+     "asserts": "polygon('46910').polygons.length === 191 (신안군 다도서, 실측 ground-truth)"
+    },
+    {
+     "name": "geoDataStore: ongjinMultiPolygonCount",
+     "asserts": "polygon('28720').polygons.length === 77 (옹진군)"
+    },
+    {
+     "name": "geoDataStore: ulleungMultiPolygonCount",
+     "asserts": "polygon('47940').polygons.length === 5 (울릉군)"
+    },
+    {
+     "name": "geoDataStore: singlePolygonNormalizedToOne",
+     "asserts": "종로구 '11110': GeoJSON 'Polygon' 타입이 MultiPolygon으로 정규화 → polygons.length===1, polygons[0].outer.length >= 3"
+    },
+    {
+     "name": "geoDataStore: coordinateOrdering",
+     "asserts": "'11110' 첫 outer 좌표: 37.0<=lat<=38.0 && 126.0<=lon<=128.0 — [lon,lat]→{lat,lon} 뒤집힘 회귀 방어"
+    },
+    {
+     "name": "geoDataStore: unknownRegionReturnsUndefined",
+     "asserts": "polygon('00000')===undefined; polygon('11')===undefined (시도 코드는 시군구 폴리곤 맵에 없음)"
+    },
+    {
+     "name": "geoDataStore: decodePerformanceUnder2Seconds",
+     "asserts": "파싱+생성+polygon('46910') 접근까지 elapsed < 2.0초 (performance.now() 사용, 테스트 코드에서만 시간 측정 허용). 11MB 파일이라 CI에서 느리면 임계값 유지하되 skip 가능 표시"
+    },
+    {
+     "name": "displayGeoStore: decodesAllSigungu",
+     "asserts": "sigungu_display.geojson 픽스처로 생성 시 polygons.size === 255"
+    },
+    {
+     "name": "displayGeoStore: knownRegionPolygonsPresentAndNonEmpty",
+     "asserts": "'11140'(서울 중구)·'26170'(부산 동구) 존재; '11140'의 polygons[0].outer가 비어있지 않음"
+    },
+    {
+     "name": "displayGeoStore: bboxInKoreaRange",
+     "asserts": "bbox.minLon>124 && bbox.maxLon<132.5; bbox.minLat>33 && bbox.maxLat<39; minLat<maxLat && minLon<maxLon"
+    },
+    {
+     "name": "displayGeoStore: dokdoAndArchipelagoPreserved",
+     "asserts": "bbox.maxLon > 131.8 (독도 보존, 130.9대로 잘리면 실패); polygons.get('47940').polygons.length >= 3; polygons.get('46900').polygons.length > 20; polygons.get('28720').polygons.length > 20. 주의: display 데이터의 신안군 키는 46900 (매칭 geojson의 46910과 다름 — 원본 그대로 보존)"
+    },
+    {
+     "name": "displayGeoStore: sidoLevelDecodes17",
+     "asserts": "sido_display.geojson + level='sido'로 생성: polygons.size===17; '11'(서울)·'26'(부산) 존재; bbox.maxLon > 131.8 (시도층도 독도 보존)"
+    },
+    {
+     "name": "regionNames: decodesDisambiguatedSigunguNames",
+     "asserts": "실제 region_codes.json으로 생성: names.size>0; names.get('26470')==='부산 연제구'; names.get('11140')==='서울 중구'; names.get('11680')==='서울 강남구'"
+    },
+    {
+     "name": "regionNames: sidoEntryKeepsFullName",
+     "asserts": "names.get('26')==='부산광역시' (시도는 약칭 아닌 nameKo 그대로)"
+    },
+    {
+     "name": "regionNames: shortenStripsAdministrativeSuffix",
+     "asserts": "shorten('서울특별시')==='서울'; shorten('부산광역시')==='부산'; shorten('경기도')==='경기'; shorten('강원특별자치도')==='강원'; shorten('세종특별자치시')==='세종'; shorten('제주특별자치도')==='제주' (마지막 두 케이스가 접미사 순서 보존 검증 — '도'/'시'가 먼저 매칭되면 실패)"
+    }
+   ],
+   "notes": "[IO 경계] Swift init은 Bundle.module에서 직접 읽음 → TS는 파싱된 JSON을 생성자 인자로 받는다. GeoDataStoreError.resourceNotFound(파일 못 찾음)는 코어에서 제거하고 로더(fetch) 레이어 책임으로 이동 — 코어에는 대응 에러 타입 불필요. 단 geojsonDecode가 구조 오류 시 throw하면 그대로 전파. [shorten 순서] 접미사 배열 순서가 로직: \"특별자치도\"가 \"도\"보다 먼저 검사돼야 \"강원특별자치도\"→\"강원\"이 된다(역순이면 \"강원특별자치\"). 접미사는 전부 BMP 한글이라 Swift Character 수 == JS UTF-16 length — endsWith + slice(0, len-suffix.length)로 안전. [first-wins] RegionNames의 shortSido는 Dictionary(uniquingKeysWith: {first,_ in first}) — TS에서 `if (!map.has(k)) map.set(k, v)`로 first-wins 보존. names 빌드는 entries 배열 순서대로 순회하며 중복 regionCode는 나중 값이 덮어씀(Swift dict 대입과 동일) — Map.set 그대로. sigungu인데 sidoCode가 shortSido에 없으면 else로 떨어져 bare nameKo — 이 폴백도 보존. [옵셔널] polygon(for:)의 nil → Map.get의 undefined. 사전은 Map<string,MultiPolygon> 권장(키가 데이터 유래라 plain object의 프로토타입 키 충돌 회피) — geojsonDecode 모듈이 Record를 반환하기로 했다면 그쪽 계약에 맞춰 통일하되 'first.bbox' 같은 의미 변화 없음(소비는 get/lookup뿐). [computeBBox] 초기값은 ±Number.MAX_VALUE(= Swift Double.greatestFiniteMagnitude). Infinity로 바꾸지 말 것(byte-faithful). min/max 누적이라 Map 순회 순서 무관. holes는 outer 내부이므로 outer만 스캔 — \"최적화 추가\" 금지. 빈 polygons 입력 시 Swift처럼 뒤집힌 bbox(MAX/-MAX) 반환 — 가드 추가하지 말 것. [Level→파일 결합 해제] Swift는 level이 리소스 파일과 codeKey를 함께 선택했지만 TS는 codeKey만 선택(\"sigungu\"→\"sgg\", \"sido\"→\"sido\"). level과 geojson 파일 불일치 방지는 로더 책임 — 로더 헬퍼에서 (파일, level) 쌍을 고정해 노출 권장. [Date 금지] 이 모듈 코어에는 시간 로직 없음. perf 테스트의 경과 측정만 performance.now() 사용(테스트 한정 허용). [테스트 픽스처] ground-truth 수치(272/255/17, 191/77/5 등)는 실제 데이터 파일에 의존 — baljachwi/BaljachwiCore/Sources/BaljachwiCore/Resources/의 region_codes.json(35KB)·sigungu.geojson(11.9MB)·sigungu_display.geojson(3.2MB)·sido_display.geojson(1.6MB)을 웹 레포 테스트 픽스처로 복사 필요. 신안군 키가 매칭=46910, display=46900으로 다른 것은 데이터 차이이며 원본 테스트 그대로 보존. [무관 규칙] dataActorReconcile 제외 규칙(reconcile/upsert/prune/visited-wins/단일행 home만 포팅, merge/split/title/delete 제외)은 이 모듈과 의존 관계 없음 — 해당 없음."
+  },
+  {
+   "key": "regionAggregate",
+   "ts": "src/core/regionAggregate.ts",
+   "module": "regionAggregate",
+   "exportsTs": "```ts\n// src/core/regionAggregate.ts\nimport type { VisitState } from \"./models\"; // 'visited' | 'wantToGo' | 'notVisited'\n\n/**\n * 시군구 상태 맵 → 시도 상태 맵 (순수·결정적).\n * 코드 앞 2자리로 그룹, 우선순위 visited > wantToGo > notVisited.\n * 입력에 없는 시도는 출력에도 없음 — 렌더 측이 `?? 'notVisited'` 기본색 처리 (vanish 아님).\n * 키 길이 < 2 인 항목은 무시.\n */\nexport function sidoStates(sigungu: Record<string, VisitState>): Record<string, VisitState> {\n  const out: Record<string, VisitState> = {};\n  for (const [code, state] of Object.entries(sigungu)) {\n    if (code.length < 2) continue;\n    const sido = code.slice(0, 2);\n    if (rank(state) > rank(out[sido] ?? \"notVisited\")) out[sido] = state;\n  }\n  return out;\n}\n\n// 내부 전용 (export 안 함): 집계 우선순위 등급\nfunction rank(s: VisitState): number {\n  switch (s) {\n    case \"visited\": return 2;\n    case \"wantToGo\": return 1;\n    case \"notVisited\": return 0;\n  }\n}\n```",
+   "constants": [
+    "rank.visited=2",
+    "rank.wantToGo=1",
+    "rank.notVisited=0",
+    "sidoPrefixLength=2",
+    "minCodeLength=2 (code.count >= 2 필터 — 미만이면 skip)"
+   ],
+   "deps": [
+    "models"
+   ],
+   "testsToPort": [
+    {
+     "name": "testMixedSidoTakesVisited",
+     "asserts": "입력 {\"11140\":\"visited\", \"11680\":\"wantToGo\", \"11110\":\"notVisited\"} → 출력 [\"11\"] === \"visited\" (혼합 시 최우선 visited)"
+    },
+    {
+     "name": "testSingleVisitedWinsOverWantToGo",
+     "asserts": "입력 {\"26470\":\"wantToGo\", \"26440\":\"wantToGo\", \"26110\":\"visited\"} → 출력 [\"26\"] === \"visited\" (단일 visited가 다수 wantToGo를 이김)"
+    },
+    {
+     "name": "testWantToGoOnlySido",
+     "asserts": "입력 {\"41110\":\"wantToGo\", \"41130\":\"wantToGo\"} → 출력 [\"41\"] === \"wantToGo\""
+    },
+    {
+     "name": "testEmptyInputEmptyOutput",
+     "asserts": "입력 {} → 출력 빈 객체 (Object.keys(result).length === 0). 렌더가 notVisited 기본 처리하므로 시도 vanish 아님이라는 의도 주석 유지"
+    },
+    {
+     "name": "testMultipleSidoIndependent",
+     "asserts": "입력 {\"11140\":\"visited\", \"26470\":\"wantToGo\"} → [\"11\"] === \"visited\", [\"26\"] === \"wantToGo\", [\"41\"] === undefined (Swift nil → TS undefined; 입력에 없는 시도는 출력에 없음)"
+    }
+   ],
+   "notes": "포팅 함정: (1) Swift Dictionary 순회 순서는 비결정적이지만 알고리즘이 엄격 부등호(>) 기반 max-fold라 순서 무관 결정적 — rank가 3개 상태에 대해 단사(injective)이므로 동률 tie-break도 관측 불가. JS Object.entries의 삽입 순서 의존성 없음. (2) `out[sido] ?? .notVisited` 옵셔널 → TS에서 `out[sido] ?? \"notVisited\"` (undefined 합체)로 그대로 매핑. (3) `code.count >= 2` 가드 필수 보존 — Swift prefix(2)는 짧은 문자열에도 안전하지만 where 절이 먼저 skip하므로 TS도 `code.length < 2 → continue`. Swift String.count는 grapheme 단위, JS length는 UTF-16 단위이나 지역코드는 ASCII 숫자 5자리라 차이 없음 (slice(0,2) === prefix(2)). (4) Date/부동소수점/정렬/정수나눗셈 전혀 없음 — 완전 순수 함수. (5) VisitState는 Swift String RawValue enum → TS string union 'visited' | 'wantToGo' | 'notVisited' 으로 models 모듈에서 import (rawValue 문자열 그대로 보존해야 SwiftData 영속값과 호환). (6) rank()는 private — export 금지, 모듈 내부 함수로 유지. (7) Swift 출력 nil 조회(sido[\"41\"]) → TS에서는 undefined 비교 또는 `\"41\" in result === false`로 검증. 원본 Swift: BaljachwiCore/Sources/BaljachwiCore/RegionAggregate.swift (29줄), 테스트: Tests/BaljachwiCoreTests/RegionAggregateTests.swift (48줄), VisitState 정의: Sources/BaljachwiCore/VisitState.swift."
+  },
+  {
+   "key": "regionMatcher",
+   "ts": "src/core/regionMatcher.ts",
+   "module": "regionMatcher",
+   "exportsTs": "```ts\n// src/core/regionMatcher.ts\nimport type { Coordinate, MultiPolygon } from \"./geoTypes\";\nimport { pointInPolygon } from \"./pointInPolygon\";\nimport type { GeoDataStore, RegionCodeEntry } from \"./geoStores\";\n// 가정하는 geoStores 계약: GeoDataStore { entries: readonly RegionCodeEntry[]; polygonFor(regionCode: string): MultiPolygon | undefined }\n// RegionCodeEntry { regionCode: string; level: string /* \"sido\" | \"sigungu\" */; nameKo: string; sidoCode: string; bbox: number[] /* [minLon, minLat, maxLon, maxLat] */ }\n\n/**\n * 좌표 → MOIS SIG_CD(regionCode) 매칭. 순수·결정적.\n * 결정 규칙(순서):\n *  1. 한국 bbox 프리필터 — lat∈[33.0,38.9] AND lon∈[124.6,132.0] 아니면 null (양끝 포함).\n *  2. sigungu 엔트리 중 entry.bbox가 점을 포함하는 것만 후보 (b[0]<=lon<=b[2] && b[1]<=lat<=b[3], 양끝 포함).\n *  3. pointInPolygon SSOT 재사용으로 히트테스트.\n *  4-a. 포함 후보 >=1 → regionCode 사전순(ASCII) 최소 반환.\n *  4-b. 포함 0 → bbox 후보들의 폴리곤 경계 최단거리(m) 계산, <=100m면 최근접(동률 시 regionCode 최소), 아니면 null.\n *  5. 후보 없으면 null.\n */\nexport class RegionMatcher {\n  // sigunguEntries는 생성자에서 한 번만 filter(level === \"sigungu\") — 시도 코드가 후보에 섞여\n  // polygonFor가 undefined를 돌려주는 것을 막는 불변식.\n  constructor(store: GeoDataStore);\n  regionCode(coordinate: Coordinate): string | null;\n\n  // ---- private (export 안 함, 시그니처만 명시) ----\n  // private distanceToBoundary(point: Coordinate, multiPolygon: MultiPolygon): number;\n  //   — 모든 폴리곤의 outer + holes 링 변까지 최단거리(m). 초기값 Number.MAX_VALUE.\n  // private distanceToRing(point: Coordinate, ring: Coordinate[]): number;\n  //   — n < 2면 Number.MAX_VALUE. i=0..n-1에 대해 segment(ring[i], ring[(i+1) % n]).\n  // private distancePointToSegment(p: Coordinate, a: Coordinate, b: Coordinate): number;\n  //   — 등거리 근사 평면(질의점 위도 cos 보정), 미터 단위. 본문 10줄급이므로 포팅 시 그대로:\n  //   const r = 6_371_000.0; const degToRad = Math.PI / 180.0;\n  //   const kx = Math.cos(p.lat * degToRad) * degToRad * r; const ky = degToRad * r;\n  //   px=p.lon*kx, py=p.lat*ky (a, b 동일 변환) → 선분 투영 t = clamp(0,1, dot/l2), l2===0이면 t=0\n  //   → Math.sqrt((px-cx)**2 + (py-cy)**2)\n}\n```",
+   "constants": [
+    "minLat=33.0",
+    "maxLat=38.9",
+    "minLon=124.6",
+    "maxLon=132.0",
+    "boundaryAbsorbMeters=100.0",
+    "earthRadiusMeters=6371000.0 (distancePointToSegment 내부 r)",
+    "degToRad=Math.PI/180.0",
+    "distInit=Number.MAX_VALUE (Swift Double.greatestFiniteMagnitude — Infinity 아님)"
+   ],
+   "deps": [
+    "geoTypes",
+    "pointInPolygon",
+    "geoStores"
+   ],
+   "testsToPort": [
+    {
+     "name": "seoulCityHall",
+     "asserts": "regionCode({lat:37.5663, lon:126.9779}) === \"11140\" (서울 중구)"
+    },
+    {
+     "name": "gwanghwamun",
+     "asserts": "regionCode({lat:37.5759, lon:126.9769}) === \"11110\" (종로구)"
+    },
+    {
+     "name": "busanStation",
+     "asserts": "regionCode({lat:35.1151, lon:129.0413}) === \"26170\" (부산 동구)"
+    },
+    {
+     "name": "jejuAirport",
+     "asserts": "regionCode({lat:33.5070, lon:126.4927}) === \"50110\" (제주시)"
+    },
+    {
+     "name": "baengnyeongdoMultiIsland",
+     "asserts": "regionCode({lat:37.9660, lon:124.7050}) === \"28720\" (옹진군 — MultiPolygon 다도서 매칭 검증)"
+    },
+    {
+     "name": "gunwi",
+     "asserts": "regionCode({lat:36.2428, lon:128.5728}) === \"27720\" (군위군)"
+    },
+    {
+     "name": "parisReturnsNil",
+     "asserts": "regionCode({lat:48.8566, lon:2.3522}) === null (한국 bbox 밖)"
+    },
+    {
+     "name": "originReturnsNil",
+     "asserts": "regionCode({lat:0, lon:0}) === null ((0,0) 프리필터 배제)"
+    },
+    {
+     "name": "outsideKoreaBboxReturnsNil",
+     "asserts": "regionCode({lat:40.0, lon:128.0}) === null (lat 40.0 > maxLat 38.9)"
+    },
+    {
+     "name": "sanityBridgeSeoulJunggu",
+     "asserts": "code = regionCode({lat:37.5663, lon:126.9779}); code === \"11140\" AND store.entries에서 regionCode===code인 엔트리의 nameKo === \"중구\""
+    },
+    {
+     "name": "sanityBridgeBusanDonggu",
+     "asserts": "code = regionCode({lat:35.1151, lon:129.0413}); 해당 엔트리 nameKo가 \"동구\"를 포함(includes)"
+    },
+    {
+     "name": "boundaryAbsorptionNearUlleung",
+     "asserts": "regionCode({lat:37.532649, lon:130.908069}) === \"47940\" — 울릉도 해안에서 약 33m 떨어진 바다 위 점(어떤 폴리곤에도 미포함), 경계거리 <=100m 흡수 경로(4-b) 검증. 유일 후보·단일 최근접으로 사전 검증된 좌표"
+    }
+   ],
+   "notes": "[옵셔널] Swift String? → string | null. store.polygon(for:)! force-unwrap은 \"후보=sigungu 엔트리\"라는 생성자 불변식으로 안전 — TS에서는 polygonFor 결과가 undefined면 명시적 throw(또는 non-null 단언)로 Swift crash 의미를 보존하되, 정상 데이터에서는 도달 불가. [경계 포함] bbox 프리필터·후보 축소 모두 양끝 포함(>=, <=) — Swift ClosedRange와 동일하게. [min() 의미] contained.min()은 Swift String < (유니코드 스칼라) 비교지만 regionCode는 ASCII 숫자 5자리이므로 JS의 `<` 사전순 비교와 완전 동일. localeCompare 금지, 단순 루프나 reduce로 `a < b` 비교. [타이브레이크] 4-b의 갱신 조건은 strict-less OR (d === bestDist && (bestCode === null || code < bestCode)) — float 완전 동등 비교 그대로 보존, 순회 순서에 의존하지 않음. 정렬을 하지 않으므로 정렬 안정성 이슈 없음. [MAX_VALUE] Double.greatestFiniteMagnitude → Number.MAX_VALUE (Infinity로 바꾸지 말 것; bestDist<=100 판정 결과는 같지만 byte-faithful 원칙). [링 닫기] distanceToRing은 ring[(i+1) % n]으로 마지막→첫 점 변을 항상 포함 — 이미 닫힌 링이면 길이 0 변이 생기고 l2===0 → t=0 분기가 흡수. 제거하지 말 것. [평면 근사] distancePointToSegment는 질의점 p의 위도에서만 cos 보정(kx)을 한 번 계산해 a, b에도 동일 적용 — 점별 cos으로 \"개선\"하면 골든값(특히 울릉 33m 케이스)이 깨질 수 있음. Math.cos 인자는 라디안(p.lat * degToRad). .squareRoot() → Math.sqrt. [시간/IO] 이 모듈은 Date/시간 사용 없음. GeoDataStore가 Bundle IO를 담당했으나 TS에서는 geoStores가 파싱된 region_codes JSON + geojsonDecode 결과를 생성자 인자로 받는 형태로 경계 분리 — RegionMatcher 자체는 store 인스턴스만 받는 순수 모듈. [테스트 픽스처] 12개 테스트 전부 실데이터 골든셋: region_codes.json(272 엔트리, bbox=[minLon,minLat,maxLon,maxLat]) + sigungu.geojson(255개 시군구 MultiPolygon, GeoJSON [lon,lat] → Coordinate{lat,lon} 변환·Polygon은 폴리곤 1개짜리 MultiPolygon으로 정규화). 테스트에서 fs로 두 픽스처를 읽어 geojsonDecode + geoStores 생성자로 store를 만든 뒤 RegionMatcher 구성. 합성 미니 픽스처로 대체하지 말 것(경계 흡수 33m 케이스는 실제 울릉도 해안선에 의존)."
+  },
+  {
+   "key": "tripSegmenter",
+   "ts": "src/core/tripSegmenter.ts",
+   "module": "tripSegmenter",
+   "exportsTs": "```ts\n// src/core/tripSegmenter.ts\nimport type { Coordinate, BBox } from './geoTypes';\n\n/** 여행 분리 입력 단위. 시간은 전부 epoch 초(number) — JS Date 금지. */\nexport interface PhotoSample {\n  /** 안정 키(정렬 tie-break에도 사용). */\n  id: string;\n  coordinate: Coordinate;\n  /** 절대 촬영 시각, UTC epoch 초 (Swift Date.timeIntervalSince1970 대응). */\n  takenAt: number;\n  /** 현지 타임존 오프셋(초). 예: KST=+32400, 파리(겨울)=+3600. */\n  localTZoffsetSeconds: number;\n}\n\n/** 여행 1개. sampleIDs는 절대시각 오름차순. */\nexport interface Trip {\n  sampleIDs: string[];\n  /** epoch 초 */\n  startAt: number;\n  /** epoch 초 */\n  endAt: number;\n  bbox: BBox; // {minLat,minLon,maxLat,maxLon} — geoTypes BBox 필드명 일치 필수\n}\n\nexport interface SegmentResult {\n  trips: Trip[];\n  /** 탐지된 home 좌표(없으면 null). */\n  home: Coordinate | null;\n}\n\n/** 임계값 전부 주입형. 기본값은 makeSegmentConfig 참조. */\nexport interface SegmentConfig {\n  jumpKM: number;                  // ③ home 점프 분리 거리(km)\n  gapHours: number;                // ④ 시간 gap 분리(h)\n  homeSuppressionRadiusKM: number; // home 근처 판정 반경(km)\n  stayShiftKM: number;             // home nil 폴백 체류지 이동(km)\n  nightStartHour: number;          // 야간 시작(포함)\n  nightEndHour: number;            // 야간 끝(미포함)\n  minHomeNights: number;           // home 성립 최소 서로 다른 현지 날짜 수\n  burstMeters: number;             // burst 거리(m)\n  burstSeconds: number;            // burst 시간(초)\n  homeClusterRadiusKM: number;     // 야간 위치 그리디 군집 반경(km)\n  trivialMinPhotos: number;        // 사진 수 미만 → trivial\n  trivialRadiusKM: number;         // AND-절 반경(km)\n  trivialDurationHours: number;    // AND-절 지속(h)\n}\n\n/** Swift SegmentConfig() 기본 생성자 대응 — partial 오버라이드 허용. */\nexport function makeSegmentConfig(overrides?: Partial<SegmentConfig>): SegmentConfig;\n\n/**\n * 사진들을 여행 단위로 분리. 순수·결정적.\n * 순서: (1)절대시각+id 정렬 → (2)burst dedupe → (3)home 탐지(전체 deduped 기준)\n *      → (3.5)excludedTripSampleIDs 제외 → (4)인접쌍 분리 → (5)trivial 제거 + 조건부 home-area 억제.\n * excludedTripSampleIDs 기본 빈 Set — home 탐지에는 영향 없음(트립 생성에서만 제외).\n */\nexport function segment(\n  samples: PhotoSample[],\n  config?: SegmentConfig,\n  excludedTripSampleIDs?: ReadonlySet<string>\n): SegmentResult;\n\n// ── Swift internal static(@testable 테스트 대상) — TS에서는 named export로 노출 ──\n\n/** 현지 시(0~23). shifted = takenAt + tzOffset. */\nexport function hourOfDay(s: PhotoSample): number {\n  const shifted = s.takenAt + s.localTZoffsetSeconds;\n  const h = Math.floor(shifted / 3600);\n  return ((h % 24) + 24) % 24;\n}\n\n/** 현지 날짜 버킷. 음수 epoch도 Math.floor로 안전 (Math.trunc 금지). */\nexport function localDay(s: PhotoSample): number {\n  return Math.floor((s.takenAt + s.localTZoffsetSeconds) / 86400);\n}\n\n/** 야간 판정. wrap: nightStart>nightEnd 이면 hour>=start || hour<end. 경계: start 포함, end 미포함. */\nexport function isNight(hour: number, config: SegmentConfig): boolean {\n  if (config.nightStartHour <= config.nightEndHour) {\n    return hour >= config.nightStartHour && hour < config.nightEndHour;\n  }\n  return hour >= config.nightStartHour || hour < config.nightEndHour;\n}\n\n/** haversine 거리(m). R=6371000, sqrt 클램프 min(1, sqrt(h)). */\nexport function haversineMeters(a: Coordinate, b: Coordinate): number;\n```",
+   "constants": [
+    "jumpKM=90",
+    "gapHours=8",
+    "homeSuppressionRadiusKM=18",
+    "stayShiftKM=40",
+    "nightStartHour=21",
+    "nightEndHour=6",
+    "minHomeNights=3",
+    "burstMeters=50",
+    "burstSeconds=120",
+    "homeClusterRadiusKM=18",
+    "trivialMinPhotos=2",
+    "trivialRadiusKM=5",
+    "trivialDurationHours=4",
+    "earthRadiusMeters=6371000 (haversine R)",
+    "secondsPerHour=3600",
+    "secondsPerDay=86400",
+    "kmToMeters=1000 (homeClusterRadiusKM*1000, 거리/1000 비교)"
+   ],
+   "deps": [
+    "geoTypes"
+   ],
+   "testsToPort": [
+    {
+     "name": "testEmptyInput",
+     "asserts": "segment([], 기본config) → trips=[], home=null."
+    },
+    {
+     "name": "testSinglePhotoIsTrivial",
+     "asserts": "BUSAN(35.1796,129.0756) 1장, epoch=localEpoch(day100,h10,tz32400) → trips 빈 배열 (사진<trivialMinPhotos=2). 헬퍼: localEpoch(day,hour,min=0,tz)=day*86400+hour*3600+min*60-tz."
+    },
+    {
+     "name": "testSortsByAbsoluteTime",
+     "asserts": "입력순서 c(h14)/a(h10)/b(h12,lat=BUSAN.lat+0.05) day200 KST → trips.length=1, sampleIDs=[\"a\",\"b\",\"c\"] (절대시각 정렬)."
+    },
+    {
+     "name": "testBurstDedupeCollapsesToFirst",
+     "asserts": "burst0..burst9: BUSAN 동일좌표, day300 h10 시작 +i*12초(Δt<120s, 거리0) + later(BUSAN.lat+0.1, day300 h16) → trips.length=1, sampleIDs=[\"burst0\",\"later\"] (앵커=첫 점, 9장 제거)."
+    },
+    {
+     "name": "testBurstDoesNotCollapseLongStay",
+     "asserts": "BUSAN 동일좌표 a(h10)/b(h11)/c(h15) day310 → Δt 1h>120s라 축약 안 됨. trips.length=1, sampleIDs=[\"a\",\"b\",\"c\"]."
+    },
+    {
+     "name": "testHomeDetectedFromNightClusters",
+     "asserts": "SEOUL(37.5665,126.9780) 야간 h23, day400..402 3일 → home!=null, |home.lat-37.5665|<=0.01, |home.lon-126.9780|<=0.01."
+    },
+    {
+     "name": "testHomeNilWhenInsufficientNights",
+     "asserts": "SEOUL 야간 h23 day500,501 2일(<minHomeNights=3) → home=null."
+    },
+    {
+     "name": "testKST23IsNight",
+     "asserts": "SEOUL h23:30, day600..602 3일, tz=32400 → home!=null (23시>=nightStart 21, wrap 경계 확인)."
+    },
+    {
+     "name": "testBusan3NightsSingleTrip",
+     "asserts": "서울 h22 야간 6일(day700..705) + 부산 4일(busan_day{0..3}: lat=BUSAN.lat+d*0.01, day710..713 h13; busan_night{0..2}: BUSAN, day710..712 h22) → home.lat≈SEOUL.lat(±0.1); \"busan\" prefix 포함 trip 정확히 1개; 그 trip의 busan-prefix id 수=7. 야간 gap(22→다음날13시=15h>gapHours)이어도 ①(둘 다 home에서 멂)로 비분리."
+    },
+    {
+     "name": "testCommuteSuppressedWhenRealTripCoexists",
+     "asserts": "5일(day800..804): home{d}=SEOUL h22, work_am{d}/work_pm{d}=SEOUL_WORK(37.5,127.04, <18km) h9/h18 + 부산(busan_day{0..2}: lat+d*0.02 day810..812 h13, busan_night{0..1} day810..811 h22) → home.lat≈SEOUL(±0.1); 어떤 trip도 \"work\" prefix id 미포함(home-area 억제, 백스톱 활성); \"busan\" prefix 포함 trip 존재."
+    },
+    {
+     "name": "testResortOnlyLibraryNotDeletedToZero",
+     "asserts": "부산만 4일(day100..103): r{d}_noon(lat+d*0.02,h13), r{d}_pm(lat+d*0.02,lon+0.03,h16), r{d}_night(BUSAN,h22,d<3만) → home이 부산으로 오탐돼도 trips 비어있으면 안 됨(모든 비사소 세그먼트가 home 반경 내 → 억제 skip 백스톱)."
+    },
+    {
+     "name": "testNearHomeOnlyActivitySurfaces",
+     "asserts": "서울 야간 h23 5일(day200..204) + 2일(day210,211) 활동 act{d}_a(37.66,127.05,h10)/act{d}_b(37.52,127.10,h14)/act{d}_c(37.60,127.08,h18) → home.lat≈SEOUL(±0.05); trips 비어있지 않음(원거리 여행 없으면 home-area 억제 비활성)."
+    },
+    {
+     "name": "testHomeTieBreakFirstAppearanceWins",
+     "asserts": "서울 야간 3일(a0..2, day300..302 h23) + 부산 야간 3일(b0..2, day303..305 h23) 동률 → home.lat≈SEOUL.lat(±0.05). 첫 등장 클러스터 승리 = max(by:)가 strict-greater일 때만 교체."
+    },
+    {
+     "name": "testDayTripSameDayTerminalHomeReturn",
+     "asserts": "home 성립(SEOUL h23 day890..892) + day900: morning_home(SEOUL h9), lunch_far(DAEJEON 36.3504,127.3845 h12), evening_home(SEOUL h20:30) → lunch_far 포함 trip 존재하고 그 trip이 evening_home도 포함(② 같은날 종착 home복귀가 ④ 8.5h gap보다 우선)."
+    },
+    {
+     "name": "testHomeSuppressionNoNewTripAtNight",
+     "asserts": "home 성립(SEOUL h22 day1000..1002) + night(SEOUL day1010 h22) + morning(SEOUL_NEAR 37.57,126.98 day1011 h8, 10h gap) → 어떤 trip도 id \"night\"/\"morning\" 미포함(home-area drop)."
+    },
+    {
+     "name": "testOverseasNightUsesLocalTZOffset",
+     "asserts": "파리(48.8566,2.3522) tz=3600, 현지 h21 3일(day1100..1102; UTC로는 20시) → home!=null, ≈파리(±0.05). tzOffset 미적용이면 야간 미인식되는 식별 케이스."
+    },
+    {
+     "name": "testOverseasTripSeparatesFromKoreanHome",
+     "asserts": "서울 home(h22 day1100..1102, tz32400) + paris_a(day1110 h10 tz3600), paris_b(lat+0.08,lon+0.08, h15 tz3600) → \"paris\" prefix 포함 trip 정확히 1개."
+    },
+    {
+     "name": "testHomeNilFallbackSplitsByStayShift",
+     "asserts": "seoul_a(h10)/seoul_b(lat+0.02,h14) day1200 + busan_a(h10)/busan_b(lat+0.02,h14) day1205, 야간 없음 → home=null, trips.length=2 (stayShiftKM=40 폴백 분리)."
+    },
+    {
+     "name": "testTrivialSmallShortClusterRemoved",
+     "asserts": "a(BUSAN h10)/b(lat+0.005 h12) day1500 → 기본config: trips=[] (반경~0.28km<5 AND 2h<4). config{trivialRadiusKM:0, trivialDurationHours:0} 주입: trips.length=1 (AND-절 무력화)."
+    },
+    {
+     "name": "testTripMetadata",
+     "asserts": "a(BUSAN h10)/b(lat+0.1,lon+0.1 h15) day1300 → trips.length=1; startAt=localEpoch(1300,10,tz32400)±0.5, endAt=localEpoch(1300,15)±0.5; bbox.minLat=35.1796, minLon=129.0756, maxLat=35.2796, maxLon=129.1756 (각 ±1e-6)."
+    },
+    {
+     "name": "testConfigInjectionJumpKMIsolatesRuleThree",
+     "asserts": "서울 home(h22 day1400..1402) + day1410: morning_home(SEOUL h9), busan_noon(BUSAN h12), busan_pm(lat+0.1 h16), busan_eve(lat+0.2 h20). 기본 jumpKM=90: 모든 id가 busan-prefix이고 busan_noon 포함하는 trip 존재(③ 발화). jumpKM=99999 주입: all-busan trip 없음 AND busan_noon 포함 trip이 morning_home도 포함(③ 미발화 병합). gap 3h<8이라 ④ 미발화, 종착 부산이라 ② 미발화 — ③ 격리 검증."
+    },
+    {
+     "name": "testExcludedSampleIDsDropTheirTripOnly",
+     "asserts": "testHomeNilFallbackSplitsByStayShift와 동일 4샘플. 기본: trips.length=2. excludedTripSampleIDs={busan_a,busan_b}: trips.length=1, busan-prefix trip 없음, seoul_a 포함 trip 유지."
+    },
+    {
+     "name": "testExcludedSampleIDsDoNotAffectHome",
+     "asserts": "night0..2(SEOUL h23 day400..402). full=segment(s) → home!=null. excluded=segment(s,{night0}) → excluded.home가 full.home과 깊은 동등(lat/lon 동일) — home 탐지는 전체 deduped 기준."
+    }
+   ],
+   "notes": "[시간] Swift Date → epoch 초 number로 전면 치환. 원본부터 시스템 Calendar/TimeZone 미사용 — hourOfDay/localDay는 Math.floor 기반 정수 산술만(Math.trunc 금지: 음수 epoch에서 floor와 다름). JS %는 부호 보존이므로 ((h%24)+24)%24 이중 mod 그대로 보존. [정렬] sorted{ t0!=t1 ? t0<t1 : $0.id<$1.id } → 복사 후 sort((a,b)=> a.takenAt-b.takenAt || codepoint 비교). id 비교는 localeCompare 금지, (a<b?-1:a>b?1:0) 코드포인트 비교(Swift String < 와 ASCII id에서 일치). [tie-break] detectHome의 max(by:{$0.days.count<$1.days.count})는 strict-greater일 때만 교체 → 동률 시 첫 등장 클러스터 승리. reduce로 candidate.days.size > best.days.size 일 때만 교체해야 testHomeTieBreakFirstAppearanceWins 통과. firstIndex(where:) → findIndex (첫 매칭 클러스터에 편입). 클러스터 편입 시마다 centroid 재계산(running re-centroid가 이후 멤버십에 영향 — 순서 보존). days는 Set<number>, .count→.size. [경계 연산자 정밀 보존] burst: dM<=burstMeters AND dt<=burstSeconds(둘 다 <=); aFar/bFar: dist/1000 > radius(strict >); ③ jump: distKM >= jumpKM(>=); ④ gap: gapH > gapHours(strict >); 폴백 stayShift: >= ; trivial AND-절: radius < AND duration < (strict <), count < trivialMinPhotos; isHomeArea/종착복귀: <= radius. [shouldSplit 순서] first-match ①→②→③→④→⑤ 순서 절대 보존. ②의 sameDayTerminatesAtHome lookahead는 exclusion 적용 후 배열(forTrips) 기준. [home/exclusion 경계] home 탐지는 전체 deduped(제외 전), 트립 런 생성만 forTrips(제외 후) — 순서 바꾸면 testExcludedSampleIDsDoNotAffectHome 깨짐. forTrips 빈 경우 {trips:[], home} 반환. [burst 앵커] 직전 점이 아니라 burst 첫 점(앵커) 기준 거리/시간 — 앵커는 생존 샘플에서만 갱신. [haversine] R=6371000, min(1,sqrt(h)) 클램프, asin 사용 — Math 함수 그대로 1:1. [옵셔널] home: Coordinate? → Coordinate|null. SegmentResult.home 비교 테스트는 lat/lon 깊은 동등(같은 코드경로라 === 성립). makeTrip의 min()??0 폴백은 비어있지 않은 run에서만 호출되므로 도달 불가 — 형태만 보존. [백스톱] hasAwayTrip(모든 비사소가 home-area면 억제 skip) 로직 누락 시 testResortOnlyLibraryNotDeletedToZero/testNearHomeOnlyActivitySurfaces 깨짐. [BBox 충돌] Swift 원본은 이 파일에서 BBox 자체 정의 — TS는 geoTypes의 BBox{minLat,minLon,maxLat,maxLon} import. geoTypes 필드명이 다르면 tripSegmenter 전용 타입으로 분리 후 re-export. [accuracy] XCTAssertEqual(accuracy:) → Math.abs(a-b)<=acc 형태(toBeCloseTo의 자릿수 의미와 다름 주의). [스코프] dataActorReconcile 관련: 본 카드는 tripSegmenter라 해당 없음 — dataActorReconcile 분석 시에는 reconcile/upsert/prune/visited-wins/단일행 home 로직·테스트만 포함하고 merge/split/title/delete는 제외한다."
+  },
+  {
+   "key": "tripMetrics",
+   "ts": "src/core/tripMetrics.ts",
+   "module": "tripMetrics",
+   "exportsTs": "```ts\n// src/core/tripMetrics.ts\nimport type { BBox } from './geoTypes';\n\n/**\n * 메트릭 산출 입력 1건 (Swift TripMetrics.Input).\n * @Model(PhotoRef) 비전달 — 호출부가 값만 추출해 전달.\n */\nexport interface TripMetricsInput {\n  lat: number;\n  lon: number;\n  /** epoch 초 (Swift Date(timeIntervalSince1970:) 대응 — JS Date 객체 금지) */\n  takenAt: number;\n  regionCode: string | null;\n}\n\n/** 산출된 여행 메트릭 (Swift TripMetrics.Metrics). */\nexport interface TripMetricsResult {\n  /** epoch 초, min(takenAt) */\n  startAt: number;\n  /** epoch 초, max(takenAt) */\n  endAt: number;\n  bbox: BBox; // { minLat, minLon, maxLat, maxLon }\n  representativeRegionCode: string | null;\n}\n\n/**\n * 최빈 regionCode. 동률은 regionCode 오름차순(가장 작은 코드) — **canonical tie-break**.\n * ScanPipeline·TripSegmenter(병합 재계산)가 이 함수에 위임한다 (drift 방지).\n * 빈 입력이면 null. (호출부가 null 제외를 이미 수행한 string[]을 전달)\n */\nexport function representativeRegionCode(codes: string[]): string | null;\n\n/**\n * 사진 집합 → 메트릭. 빈 입력이면 null (호출부 가드 후 사용 계약).\n * 입력 순서 무관 (min/max·최빈). regionCode가 null인 항목은 대표코드 집계에서만 제외.\n */\nexport function computeTripMetrics(photos: TripMetricsInput[]): TripMetricsResult | null;\n```",
+   "constants": [],
+   "deps": [
+    "geoTypes"
+   ],
+   "testsToPort": [
+    {
+     "name": "computeEmptyReturnsNil",
+     "asserts": "computeTripMetrics([]) === null"
+    },
+    {
+     "name": "computeMetricsFromPhotos",
+     "asserts": "입력 3건(시간 역순·좌표 뒤섞음): (lat 37.4, lon 127.1, t=100, region '11140'), (37.6, 126.9, t=300, region null), (37.5, 127.0, t=200, '11140'). 기대: bbox={minLat:37.4, minLon:126.9, maxLat:37.6, maxLon:127.1}, startAt=100, endAt=300, representativeRegionCode='11140' (null 제외 후 최빈)"
+    },
+    {
+     "name": "computeAllNilRegionGivesNilRep",
+     "asserts": "입력 2건: (35.1, 129.0, t=10, null), (35.2, 129.1, t=20, null). 기대: representativeRegionCode === null, startAt=10, endAt=20 (bbox/시간은 정상 산출)"
+    },
+    {
+     "name": "representativeTieBreakSmallestCode",
+     "asserts": "representativeRegionCode(['11140','11140','11110','11110']) === '11110' — 2:2 동률 시 코드 오름차순 최소. ScanPipeline 시나리오6과 동일 진실이어야 함"
+    },
+    {
+     "name": "representativeMostFrequentWins",
+     "asserts": "representativeRegionCode(['26170','26170','11110']) === '26170' — 빈도 우선"
+    },
+    {
+     "name": "representativeEmptyReturnsNil",
+     "asserts": "representativeRegionCode([]) === null"
+    }
+   ],
+   "notes": "함정: (1) tie-break 구현 — Swift는 Dictionary.max(by:)에 비교 반전 트릭(`lhs.key > rhs.key`)을 써서 \"빈도 내림차순, 동률은 키 오름차순 최소\"를 얻는다. Swift Dictionary 순회 순서는 비결정적이지만 (value,key)에 전순서가 걸려 있어 결과는 결정적. TS에서는 트릭을 복제하지 말고 reduce로 직접 구현: `(count > best.count) || (count === best.count && code < best.code)`일 때 교체. 문자열 비교는 `<`/`>` 연산자(UTF-16 코드유닛) 사용 — localeCompare 금지 (지역코드는 ASCII 숫자라 Swift 유니코드 스칼라 비교와 동일 결과). (2) counts는 Map<string,number> 권장 — plain object는 '__proto__' 등 프로토타입 키 오염 가능. (3) 옵셔널 — regionCode는 string|null로 고정, compactMap은 `.filter((c): c is string => c !== null)`. compute에서 전부 null이어도 metrics 자체는 반환하고 rep만 null (rep null ≠ compute null). (4) Date 금지 — takenAt은 epoch 초 number로 받음. Swift force-unwrap(min()!/max()!)은 빈 배열 가드 후라 안전 → TS도 length 체크 후 reduce/Math.min·max. (5) 정수 나눗셈·정렬 안정성 이슈 없음(정렬 자체가 없음). 빈도 카운트는 정수, lat/lon min/max는 비교만 하므로 부동소수점 오차 없음. (6) 이 모듈은 tripSegmenter·scanPipeline이 위임 호출하는 canonical 진실이므로, 그쪽 포팅 시 로직 복제 금지하고 반드시 import 하게 할 것. (7) dataActorReconcile 관련 추림 지침은 본 모듈(tripMetrics)에는 해당 없음."
+  },
+  {
+   "key": "scanPipeline",
+   "ts": "src/core/scanPipeline.ts",
+   "module": "scanPipeline",
+   "exportsTs": "```ts\n// src/core/scanPipeline.ts\nimport type { Coordinate, BBox } from \"./geoTypes\";\nimport type { ScannedPhoto } from \"./photoScanFilter\";   // { localIdentifier: string; lat: number; lon: number; takenAt: number /* epoch초 */ }\nimport type { RegionMatcher } from \"./regionMatcher\";     // matcher.regionCode(coord: Coordinate): string | null\nimport type { TZConfig } from \"./photoTime\";              // tzOffset(coord, exifOffsetSeconds, deviceOffsetSeconds, config)\nimport type { SegmentConfig } from \"./tripSegmenter\";     // segment(samples, config, excludedTripSampleIDs)\n\n/** 파이프라인 처리 후 사진 1장. 입력 ScannedPhoto + 파생정보(타임존/지역/여행). */\nexport interface PipelinePhoto {\n  localIdentifier: string;\n  lat: number;\n  lon: number;\n  /** epoch 초 (Swift Date → number) */\n  takenAt: number;\n  /** 현지 타임존 오프셋(초, UTC 동쪽 양수) */\n  localTZoffsetSeconds: number;\n  /** MOIS SIG_CD. 매칭 실패(해외/바다) 시 null */\n  regionCode: string | null;\n  /** 소속 여행 id. 어느 여행에도 속하지 않으면 null */\n  tripID: string | null;\n  /** 소속 여행 내 takenAt 오름차순 인덱스(0,1,2...). 여행 없으면 0 */\n  sortIndex: number;\n}\n\n/** 지역 단위 방문 집계. regionCode가 null인 사진(해외)은 집계 제외. */\nexport interface PipelineRegion {\n  regionCode: string;\n  photoCount: number;\n  firstVisit: number; // epoch 초\n  lastVisit: number;  // epoch 초\n}\n\n/** 여행 1개. TripSegmenter Trip + 결정적 id + 대표 지역코드. */\nexport interface PipelineTrip {\n  /** 결정적 id: `${Math.trunc(startAt)}_${sampleIDs[0] ?? \"\"}` */\n  id: string;\n  /** 소속 사진 id(takenAt 오름차순, 동률 시 id 안정정렬 — tripSegmenter가 보장) */\n  sampleIDs: string[];\n  startAt: number; // epoch 초\n  endAt: number;   // epoch 초\n  bbox: BBox;\n  /** 여행 사진 regionCode 최빈값(동률 시 regionCode 오름차순 최소; 전부 null이면 null) — tripMetrics.representativeRegionCode 위임 */\n  representativeRegionCode: string | null;\n}\n\n/** 파이프라인 전체 결과. */\nexport interface PipelineResult {\n  photos: PipelinePhoto[];   // 입력 순서 보존\n  regions: PipelineRegion[]; // regionCode 오름차순\n  trips: PipelineTrip[];     // startAt 오름차순, 동률 시 id 오름차순\n  home: Coordinate | null;   // SegmentResult.home 그대로\n}\n\n/**\n * 스캔 결과 통합 처리(순수·결정적). Swift ScanPipeline.build 1:1.\n * excludedTripSampleIDs: 핀된 사진 id — 트립 세그먼테이션에서만 제외.\n * photos/regions/home은 전체 스캔 기준 유지. 기본 빈 Set.\n */\nexport function buildScanPipeline(\n  scanned: readonly ScannedPhoto[],\n  matcher: RegionMatcher,\n  deviceOffsetSeconds: number,\n  segmentConfig?: SegmentConfig,              // 미지정 시 tripSegmenter 기본 SegmentConfig()\n  tzConfig?: TZConfig,                        // 미지정 시 photoTime 기본 TZConfig()\n  excludedTripSampleIDs?: ReadonlySet<string> // 기본 new Set()\n): PipelineResult;\n```",
+   "constants": [
+    "tripIDFormat=`${Math.trunc(trip.startAt)}_${trip.sampleIDs[0] ?? \"\"}` (Int(Double) 절삭)",
+    "sortIndexWithoutTrip=0",
+    "exifOffsetSeconds=null (MVP 스캔은 EXIF 오프셋 없음 — tzOffset 호출 시 항상 null)",
+    "excludedTripSampleIDsDefault=빈 Set",
+    "(테스트) deviceKST=32400",
+    "(테스트) baseEpoch=1704067200 (2024-01-01T00:00:00Z)",
+    "(테스트 골든좌표) seoulCityHall=(37.5663,126.9779)→\"11140\"",
+    "(테스트 골든좌표) gwanghwamun=(37.5759,126.9769)→\"11110\"",
+    "(테스트 골든좌표) busanStation=(35.1151,129.0413)→\"26170\"",
+    "(테스트 골든좌표) jejuAirport=(33.5070,126.4927)→\"50110\"",
+    "(테스트 골든좌표) paris=(48.8566,2.3522)→null"
+   ],
+   "deps": [
+    "geoTypes",
+    "photoTime",
+    "regionMatcher",
+    "tripSegmenter",
+    "tripMetrics",
+    "photoScanFilter"
+   ],
+   "testsToPort": [
+    {
+     "name": "testSeoulRegionAggregation",
+     "asserts": "입력: seoulCityHall(37.5663,126.9779) 사진 5장 s1..s5, epoch=base+{0,1,2,3,5}*3600 (base=1704067200), deviceOffset=32400. 기대: photos.length=5, 전원 regionCode=\"11140\"; regions의 \"11140\" 항목 photoCount=5, firstVisit=1704067200, lastVisit=1704067200+18000=1704085200."
+    },
+    {
+     "name": "testOverseasPhotoExcludedFromRegions",
+     "asserts": "입력: paris(48.8566,2.3522) 2장 p1@base, p2@base+7200, deviceOffset=32400. 기대: 전원 regionCode=null, regions=[] (해외 사진은 집계 제외)."
+    },
+    {
+     "name": "testBusanTripWithSeoulHome",
+     "asserts": "입력: 서울 home — d=0..2에 대해 nightEpoch=base+14*3600+d*86400(KST 23:00)에 h{d}a, +1800에 h{d}b (seoulCityHall, 6장). 부산 trip — tripDay=base+4*86400에 b1..b4 (busanStation), epoch=tripDay+{0,1,2,5}*3600. deviceOffset=32400. 기대: home!=null; trips.length=1; trip.representativeRegionCode=\"26170\"; trip.sampleIDs=[\"b1\",\"b2\",\"b3\",\"b4\"]; b_i 사진의 tripID=trip.id, sortIndex=i(0..3); h* 사진 6장 전부 tripID=null, sortIndex=0."
+    },
+    {
+     "name": "testTripIDDeterminism",
+     "asserts": "입력: busanStation 4장 d1..d4, epoch=base+{0,1,2,5}*3600, deviceOffset=32400. build 2회. 기대: trips 비어있지 않음; r1.trips.map(id)===r2.trips.map(id); trips[0].id === `${Math.trunc(startAt)}_${sampleIDs[0]}` (= \"1704067200_d1\")."
+    },
+    {
+     "name": "testInputOrderPreservedAndRegionsSorted",
+     "asserts": "입력: x1=busanStation@base+10h, x2=seoulCityHall@base+0h, x3=jejuAirport@base+5h (일부러 시간 역순 입력). 기대: photos.map(localIdentifier)=[\"x1\",\"x2\",\"x3\"] (입력 순서 보존); regions.map(regionCode)=[\"11140\",\"26170\",\"50110\"] (오름차순)."
+    },
+    {
+     "name": "testRepresentativeRegionCodeTieBreak",
+     "asserts": "입력: t1=seoulCityHall@base(11140), t2=gwanghwamun@base+2h(11110), t3=seoulCityHall@base+4h(11140), t4=gwanghwamun@base+6h(11110). gap<8h·이동<40km·야간 없음→home null→단일 trip. 기대: trips.length=1; representativeRegionCode=\"11110\" (2:2 동률→regionCode 오름차순 최소)."
+    },
+    {
+     "name": "testKoreaCoordinateGetsKST",
+     "asserts": "입력: k1=seoulCityHall@base, deviceOffsetSeconds=0 (일부러 UTC). 기대: photos[0].localTZoffsetSeconds=32400 (한국 bbox 좌표는 deviceOffset 무관 KST)."
+    },
+    {
+     "name": "testExcludedTripSampleIDsKeepRegionsPhotosHome",
+     "asserts": "입력: testBusanTripWithSeoulHome과 동일 픽스처(h0a..h2b 6장 + b1..b4 4장), excludedTripSampleIDs={\"b1\",\"b2\",\"b3\",\"b4\"}. 기대: trips=[] (핀 제외→유령 trip 없음); home!=null (전체 스캔 기준 유지); photos.length=10 (핀 포함 전체); regions에 \"26170\" 존재 (부산 집계 유지)."
+    }
+   ],
+   "notes": "[포팅 함정]\n1) Date→epoch초 number: 모든 시각(takenAt/firstVisit/lastVisit/startAt/endAt)은 epoch 초 number로. min/max는 Math.min/Math.max. JS Date 메서드 금지.\n2) trip id의 Int(Double): Swift Int(timeIntervalSince1970)은 0방향 절삭 → Math.trunc 사용 (Math.floor 아님; 테스트 epoch은 전부 양의 정수라 동일하지만 byte-faithful하게 trunc).\n3) 이중 옵셔널 평탄화: Swift `regionByID[$0] ?? nil`은 String?? → String? 평탄화. TS에서는 Map<string, string|null>에서 get이 undefined(키 없음) 또는 null(매칭 실패) 둘 다 가능 → compactMap 대응 시 `!= null`로 둘 다 걸러야 함(representativeRegionCode에는 string만 전달).\n4) regionByID first-wins: localIdentifier 중복 시 Dictionary(uniquingKeysWith: first) → TS는 `if (!map.has(id)) map.set(id, code)`. 마지막 값 덮어쓰기(JS 기본)와 반대이므로 주의.\n5) tripMembership은 일반 객체/Map 대입(last-wins)이지만 segmenter가 sample을 한 trip에만 배정하므로 실질 무관 — 같은 순회 순서만 유지.\n6) trips 정렬: startAt 오름차순 + 동률 시 id 문자열 오름차순 명시 비교자. JS sort는 안정적이므로 문제 없으나 비교자를 그대로 구현(`t0 !== t1` 숫자 비교 후 `a.id < b.id`). regions 정렬은 regionCode `<` 단순 문자열 비교(localeCompare 금지 — Swift String `<`는 유니코드 코드포인트 비교, 숫자 코드라 `<` 연산자로 동일).\n7) representativeRegionCode는 재구현 금지 — tripMetrics.representativeRegionCode에 위임(canonical tie-break: 빈도 내림차순, 동률 시 코드 오름차순). Swift 쪽 counts.max 비교반전 트릭을 이 모듈에서 복제하지 말 것.\n8) tzOffset 호출은 항상 exifOffsetSeconds=null 고정. segmentConfig/tzConfig 기본값은 각 모듈의 기본 생성자 값과 동일해야 함(파라미터 미지정 시).\n9) photos는 입력 순서 보존(map만, 정렬 없음). sampleIDs 순서는 tripSegmenter 산출(takenAt 오름차순, 동률 id 안정정렬)을 그대로 신뢰.\n10) 테스트 픽스처: 실제 GeoDataStore(11MB GeoJSON) 기반 RegionMatcher가 필요 — Swift 테스트는 클래스당 1회 생성·공유. TS에서는 geoStores+geojsonDecode로 파싱된 JSON을 모듈 레벨 싱글턴/beforeAll에서 1회 로드해 공유(테스트 전용 의존: geoStores, geojsonDecode). 디코드 비용 때문에 매 테스트 재로드 금지.\n11) `trip.sampleIDs.first ?? \"\"` — 빈 trip은 발생하지 않지만 `?? \"\"` 폴백 유지.\n12) (지시 명시) dataActorReconcile 모듈의 경우: reconcile/upsert/prune/visited-wins/단일행 home에 해당하는 로직과 테스트만 포팅 대상으로 추리고 merge/split/title/delete는 제외한다. scanPipeline은 dataActorReconcile에 의존하지 않음."
+  },
+  {
+   "key": "photoScanFilter",
+   "ts": "src/lib/exif.ts (필터 규칙만)",
+   "module": "photoScanFilter",
+   "exportsTs": "// src/lib/exif.ts — PhotoScanService.swift 의 필터·dedup·청크 진행보고 규칙 포트\n// (PhotoKit 추상화 부분은 버림: \"파싱된 asset 배열을 인자로 받는\" 순수 함수 경계)\n\n/** 필터 전 raw 사진 메타데이터 (Swift PhotoAsset 프로토콜 대응). 값 없음 = null. */\nexport interface RawPhotoAsset {\n  /** 라이브러리 내 고유 식별자. dedup 키. */\n  localIdentifier: string;\n  /** 위도. 지오태그 없으면 null. */\n  latitude: number | null;\n  /** 경도. 지오태그 없으면 null. */\n  longitude: number | null;\n  /** 촬영 시각 — epoch 초(number). 없으면 null. JS Date 객체 금지. */\n  takenAtEpoch: number | null;\n}\n\n/** 필터·dedup 통과 결과 1건. 좌표/시각 non-null 보장 후 값. (Swift ScannedPhoto) */\nexport interface ScannedPhoto {\n  localIdentifier: string;\n  lat: number;\n  lon: number;\n  /** epoch 초 */\n  takenAt: number;\n}\n\n/** 스캔 산출물. rawAssetIDs 는 **필터 전 전체** id 집합(삭제 감지용 — dataActorReconcile 의 pruneMissingPins 가 소비). */\nexport interface ScanOutput {\n  photos: ScannedPhoto[];\n  rawAssetIDs: Set<string>;\n}\n\n/** (0,0) 좌표 판정 임계값: |lat| < ORIGIN_EPSILON && |lon| < ORIGIN_EPSILON 일 때만 스킵 (AND). */\nexport const ORIGIN_EPSILON = 1e-7;\n\n/** 기본 청크 크기. */\nexport const DEFAULT_CHUNK_SIZE = 1000;\n\nexport type ProgressCallback = (processed: number, total: number) => void;\n\n/**\n * 전체 스캔: 필터(geotag null / (0,0) AND / takenAt null 스킵) → dedup(같은 id 첫 등장만)\n * → chunkSize 단위 progress(processed, total) 호출. 입력 순서 보존. 순수·결정적.\n * chunkSize < 1 은 1 로 보정. 빈 입력이면 progress 는 한 번도 호출되지 않음.\n */\nexport function scanPhotos(\n  assets: readonly RawPhotoAsset[],\n  chunkSize?: number,          // default DEFAULT_CHUNK_SIZE\n  progress?: ProgressCallback  // default no-op\n): ScanOutput;",
+   "constants": [
+    "ORIGIN_EPSILON=1e-7",
+    "DEFAULT_CHUNK_SIZE=1000",
+    "MIN_CHUNK_STEP=1 (step = max(1, chunkSize) 보정)"
+   ],
+   "deps": [],
+   "testsToPort": [
+    {
+     "name": "filtersNonGeotaggedAndOrigin",
+     "asserts": "t0=1700000000 (epoch초). 입력 3건: gps(37.5, 127.0, t0), noloc(null, null, t0), origin(0, 0, t0) → photos 정확히 1건: {localIdentifier:'gps', lat:37.5, lon:127.0, takenAt:1700000000}"
+    },
+    {
+     "name": "rawAssetIDsIncludesPreFilterIDs",
+     "asserts": "입력 4건: gps(37.5,127.0,t0), nogps(null,null,t0), nodate(37.5,127.0,null), origin(0,0,t0) → photos.map(id)==['gps'] (1건), rawAssetIDs == Set{'gps','nogps','nodate','origin'} (필터 탈락분 포함 4건). 삭제 감지 회귀 방지 핵심: photos 로 집합을 만들면 GPS가 나중에 제거된 핀 사진이 '삭제됨'으로 오판됨"
+    },
+    {
+     "name": "dedupKeepsFirstOccurrence",
+     "asserts": "입력 2건 동일 id: dup(37.5,127.0,t0), dup(38.0,128.0,t0+60) → photos 1건, 값은 **첫 등장**: lat 37.5, lon 127.0, takenAt t0 (두 번째 38.0/128.0/t0+60 아님)"
+    },
+    {
+     "name": "skipsNilCreationDate",
+     "asserts": "입력: nodate(37.5,127.0,takenAt=null), ok(36.0,128.0,t0) → photos.map(id)==['ok'] — 좌표 유효해도 takenAt null 이면 스킵"
+    },
+    {
+     "name": "originFilterIsAndNotOr",
+     "asserts": "입력 3건 모두 t0: zerozero(0,0), zerolon(0,50), zerolat(50,0) → photos.map(id)==['zerolon','zerolat'] — (0,0)만 스킵, 한쪽만 0은 생존 (AND 조건)"
+    },
+    {
+     "name": "preservesInputOrder",
+     "asserts": "입력 5건: p0..p4, lat=37.0+i, lon=127.0, takenAt=t0+i → photos.map(id)==['p0','p1','p2','p3','p4'] 입력 순서 그대로"
+    },
+    {
+     "name": "emptyLibraryReturnsEmpty",
+     "asserts": "입력 [] → photos.length==0 (추가로: progress 콜백 0회 호출이어야 함 — while index<0 진입 안 함)"
+    },
+    {
+     "name": "chunkedProgressReporting",
+     "asserts": "2500건 전부 유효(id='p'+i, 37.5, 127.0, takenAt=t0+i), chunkSize=1000 → progress 호출 3회, processed 순서 [1000, 2000, 2500], 모든 호출의 total==2500, 마지막 processed==total, photos.length==2500 순서 보존"
+    },
+    {
+     "name": "processedCountsRawAssetsEvenWhenFiltered",
+     "asserts": "1500건, 짝수 i 는 geotag(37.5,127.0)·홀수 i 는 lat/lon null, 전부 takenAt=t0, chunkSize=1000 → processed 순서 [1000, 1500] (마지막 부분 청크는 total 캡), 마지막 total==1500. processed 는 필터/dedup 무관 raw 순회 수"
+    }
+   ],
+   "notes": "[함정 1 — falsy 0 좌표] Swift `guard let lat = asset.latitude` 의 TS 대응은 반드시 `latitude === null` (또는 `== null`) 체크. `if (!lat)` 류 falsy 검사는 lat=0 (유효값, zerolon 테스트)을 잘못 스킵시킴. null 검사와 (0,0) origin 검사는 별개의 두 단계.\n[함정 2 — 필터 순서와 dedup 위치] byte-faithful 순서: (1) lat/lon null → (2) |lat|<1e-7 && |lon|<1e-7 (strict <, AND) → (3) takenAt null → (4) dedup. dedup 이 마지막이므로 \"필터 탈락한 첫 등장\"은 dedup 슬롯을 소비하지 않음 — 같은 id 의 두 번째(유효) asset 이 통과할 수 있다. 순서 바꾸면 동작 달라짐.\n[함정 3 — progress 시맨틱] processed = min(index+step, total) = 청크 끝 인덱스(raw 순회 수, 필터/dedup 무관). 빈 입력이면 progress 0회 (progress(0,0) 호출하지 않음). step = max(1, chunkSize) 로 0/음수 보정 (Swift Int 파라미터이므로 TS 에서 비정수 입력 방어가 필요하면 Math.floor 후 max — 단 테스트는 정수만 사용).\n[함정 4 — Date 금지] Swift Date(timeIntervalSince1970:) → epoch 초 number 로 표현. t0=1_700_000_000, t0.addingTimeInterval(60) → 1700000060 등 순수 정수 산술. JS Date 객체/타임존 메서드 사용 금지.\n[함정 5 — autoreleasepool] JS 에 대응 개념 없음 — 그냥 제거 (의미적 no-op). while+slice 대신 인덱스 루프로 청크 경계만 유지하면 됨 (assets.slice 로 복사 만들 필요 없음, index..<end 범위 순회).\n[함정 6 — Set 비교] rawAssetIDs 테스트는 집합 동등성(멤버십)만 비교 — 순서 무관. JS Set 은 삽입순이지만 테스트에서 정렬 후 배열 비교 또는 멤버십 비교로 작성.\n[경계 분리] PhotoLibrary/PhotoAsset 프로토콜은 포팅하지 않음 — scanPhotos 가 plain RawPhotoAsset[] 를 인자로 받는 순수 함수. ScannedPhoto/ScanOutput 은 plain interface.\n[모듈 경계] 이 카드는 photoScanFilter(필터 규칙) 범위. rawAssetIDs 는 dataActorReconcile 의 pruneMissingPins 입력 계약이므로 ScanOutput 형태(photos + rawAssetIDs 분리)를 그대로 보존할 것. dataActorReconcile 포팅 시에는 reconcile/upsert/prune/visited-wins/단일행 home 로직·테스트만 추리고 merge/split/title/delete 는 제외.\n[원본] C:/Users/sengmin.hyun/Downloads/baljachwi/BaljachwiCore/Sources/BaljachwiCore/PhotoScanService.swift (115줄), Tests/PhotoScanServiceTests.swift (172줄, 테스트 9개 전부 포팅 대상)."
+  },
+  {
+   "key": "dataActorReconcile",
+   "ts": "src/data/repo.ts + src/data/reconcile.ts (reconcile/upsert/prune/visited-wins/단일행 home만 — merge/split/title/delete 제외)",
+   "module": "dataActorReconcile",
+   "exportsTs": "// ============ src/data/repo.ts ============\nimport type { Coordinate } from \"../geo/geoTypes\";\n\n/** Swift VisitState(String rawValue) 그대로. */\nexport type VisitState = \"visited\" | \"wantToGo\" | \"notVisited\";\nexport type RegionLevel = \"sido\" | \"sigungu\";\n\n/** @Model PhotoRef → plain mutable record. 시간은 전부 epoch 초(number). */\nexport interface PhotoRefRecord {\n  localIdentifier: string;\n  lat: number;\n  lon: number;\n  takenAt: number;               // epoch sec (Swift Date.timeIntervalSince1970)\n  localTZoffsetSeconds: number;  // 정수\n  regionCode: string | null;\n  tripID: string | null;        // TripRecordRow.id 약참조 (관계 없음)\n  sortIndex: number;             // 정수\n  userOverride: boolean;\n}\n\n/** @Model RegionStatus → plain mutable record. */\nexport interface RegionStatusRecord {\n  regionCode: string;\n  level: RegionLevel;\n  state: VisitState;\n  photoCount: number;\n  firstVisit: number | null;     // epoch sec\n  lastVisit: number | null;\n  userOverride: boolean;\n}\n\n/** @Model TripRecord → plain mutable record. bbox는 4개 number 평탄 저장. */\nexport interface TripRecordRow {\n  id: string;\n  startAt: number;               // epoch sec\n  endAt: number;\n  minLat: number;\n  minLon: number;\n  maxLat: number;\n  maxLon: number;\n  representativeRegionCode: string | null;\n  userOverride: boolean;\n  title: string | null;          // 본 모듈은 보존만 (설정 = title 기능, 제외 범위)\n}\n\n/** @Model HomeCache → 좌표 행. */\nexport interface HomeCacheRow {\n  lat: number;\n  lon: number;\n}\n\n/** SwiftData ModelContext 대체 — 인메모리 mutable store. 단일 writer 규율은 호출부 책임. */\nexport interface DataStore {\n  photos: PhotoRefRecord[];\n  regions: RegionStatusRecord[];\n  trips: TripRecordRow[];\n  /** 불변식 ≤1행. 외부 폴리션(다중 행) 입력 허용 위해 배열 — reconcile이 단일 행으로 정리. */\n  home: HomeCacheRow[];\n}\n\nexport function createEmptyStore(): DataStore {\n  return { photos: [], regions: [], trips: [], home: [] };\n}\n\n/** DataActor.deleteAll — 4종 전부 비움(테스트 리셋 + 데이터 초기화). */\nexport function deleteAll(store: DataStore): void {\n  store.photos.length = 0;\n  store.regions.length = 0;\n  store.trips.length = 0;\n  store.home.length = 0;\n}\n\n/** DataActor.home() — 첫 HomeCache 행의 좌표(없으면 null). */\nexport function homeCoordinate(store: DataStore): Coordinate | null;\n\n/** DataActor.pinnedPhotoIDs() — userOverride===true PhotoRef의 localIdentifier 집합. */\nexport function pinnedPhotoIDs(store: DataStore): Set<string>;\n\n// ============ src/data/reconcile.ts ============\nimport type { PipelineResult } from \"../scan/scanPipeline\";\nimport type { DataStore } from \"./repo\";\n\n/** apply 결과 요약. Swift tripPersistentIDs(PersistentIdentifier[]) → touchedTripIDs(string[])로 대체. */\nexport interface ApplyResult {\n  insertedPhotos: number;\n  updatedPhotos: number;\n  skippedOverridePhotos: number;\n  regionsWritten: number;   // insert+update 합산, override 스킵 제외\n  tripsWritten: number;     // insert+update 합산, override 스킵 제외\n  /** result.trips 순회 순서대로 touched TripRecord id. override 스킵 trip도 포함(append가 continue보다 앞). */\n  touchedTripIDs: string[];\n}\n\nexport interface ReconcileResult {\n  applied: ApplyResult;\n  deletedPhotos: number;    // 부재 ∧ 비-override PhotoRef\n  deletedRegions: number;   // 부재 ∧ 비-override RegionStatus (sigungu만)\n  deletedTrips: number;     // 부재 ∧ 비-override ∧ 생존사진 미참조 TripRecord\n  homeChanged: boolean;     // home set/clear/update로 좌표가 바뀌면 true\n}\n\nexport interface PruneMissingResult {\n  removedPhotos: number;    // 제거된 부재 핀 PhotoRef\n  recalcedTrips: number;    // 생존자 기준 제자리 recalc된 trip\n  deletedTrips: number;     // 생존 0으로 삭제된 trip\n}\n\n/** 멱등 upsert(삭제 없음, userOverride 보존). home은 절대 미터치. 부분/증분 입력용. */\nexport function apply(store: DataStore, result: PipelineResult): ApplyResult;\n\n/** 전체 동기화: upsert + 부재 prune(userOverride 면제, 사진→지역→여행 순) + home 단일행 동기화(clear-on-null).\n *  ⚠ result는 전체 스캔의 완결 출력이어야 함(부분 입력이면 데이터 손실). */\nexport function reconcile(store: DataStore, result: PipelineResult): ReconcileResult;\n\n/** 가고싶음 토글. on=true: visited 행 보존(no-op)/기존 행 wantToGo+override/부재 시 신규 행(photoCount 0, first/lastVisit null).\n *  on=false: visited 행 보존(삭제 금지)/그 외 행 삭제. level===\"sigungu\"만 대상. */\nexport function setWantToGo(store: DataStore, regionCode: string, on: boolean): void;\n\n/** 삭제된 핀 정리: rawAssetIDs(pre-filter 전체 라이브러리 id)에 없는 userOverride PhotoRef 제거 +\n *  영향 trip을 생존자 기준 제자리 recalc(id/title/userOverride 보존, 메트릭 필드만 덮음) 또는 생존 0이면 삭제.\n *  ⚠ 전체(.authorized) 스캔에서만 호출 — 게이트는 호출부 책임. */\nexport function pruneMissingPins(store: DataStore, rawAssetIDs: ReadonlySet<string>): PruneMissingResult;",
+   "constants": [
+    "levelSigungu=\"sigungu\"",
+    "levelSido=\"sido\"",
+    "visitStateVisited=\"visited\"",
+    "visitStateWantToGo=\"wantToGo\"",
+    "visitStateNotVisited=\"notVisited\"",
+    "wantToGoNewRowPhotoCount=0",
+    "wantToGoNewRowFirstVisit=null",
+    "wantToGoNewRowLastVisit=null"
+   ],
+   "deps": [
+    "geoTypes",
+    "scanPipeline",
+    "tripMetrics",
+    "models"
+   ],
+   "testsToPort": [
+    {
+     "name": "testApplyToEmptyStoreInserts (T1)",
+     "asserts": "basicResult(P1 lat37.5/lon127.0/t100/tz32400/region 11140/trip T1/sort0, P2 t200/sort1; region 11140 count2 first100 last200; trip T1 start100 end200 bbox(37.4,126.9,37.6,127.1) rep 11140; home null)를 빈 store에 apply → insertedPhotos 2, updatedPhotos 0, skipped 0, regionsWritten 1, tripsWritten 1, touchedTripIDs.length 1. store: photos 2 / regions 1 / trips 1. region 행 state=visited, photoCount 2, level sigungu"
+    },
+    {
+     "name": "testIdempotentReapply (T2)",
+     "asserts": "apply(basicResult) 2회 → 2회차 insertedPhotos 0, updatedPhotos 2. store 카운트 불변 photos 2 / regions 1 / trips 1 (중복 없음)"
+    },
+    {
+     "name": "testReapplyUpdatesNonOverrideFields (T3)",
+     "asserts": "apply(basic) 후, P1 regionCode 11140→11110으로 바뀐 결과(regions: 11110 count1 first100 last100 + 11140 count1 first200 last200) apply → store의 P1.regionCode === \"11110\""
+    },
+    {
+     "name": "testUserOverridePhotoPreserved (T4)",
+     "asserts": "apply(basic) 후 store 직접 변형: P1.userOverride=true, P1.regionCode=\"OVERRIDE\". P1을 region 11110으로 바꾼 결과 apply → skippedOverridePhotos 1, P1.regionCode \"OVERRIDE\" 유지, userOverride true 유지"
+    },
+    {
+     "name": "testNonWantToGoOverrideRegionPreserved (T5)",
+     "asserts": "apply(basic) 후 region 11140 행 직접 변형: userOverride=true, state=\"notVisited\". basic 재적용 → regionsWritten 0(스킵), state \"notVisited\" 유지, userOverride true 유지 (visited-wins는 wantToGo 한정 — guard 분기 검증)"
+    },
+    {
+     "name": "testUserOverrideTripPreserved (T6)",
+     "asserts": "apply(basic) 후 trip T1 직접 변형: userOverride=true, representativeRegionCode=\"MANUAL\". basic 재적용 → tripsWritten 0 그리고 touchedTripIDs.length 1(이중 계약: written 제외 + ID 집합 포함). rep \"MANUAL\" 유지"
+    },
+    {
+     "name": "testDeleteAllClearsEverything (T7)",
+     "asserts": "apply(basic) → deleteAll → photos 0 / regions 0 / trips 0"
+    },
+    {
+     "name": "testReturnedTripIDsResolve (T8, 적응)",
+     "asserts": "apply(basic) → touchedTripIDs[0] === \"T1\" (Swift persistentModelID 교차컨텍스트 resolve를 id 문자열 계약으로 대체)"
+    },
+    {
+     "name": "testPhotoFieldsPersisted (T9)",
+     "asserts": "apply(basic) 후 photos를 sortIndex asc 정렬 → localIdentifier [P1,P2], tripID [T1,T1], regionCode [11140,11140], 첫 사진 localTZoffsetSeconds 32400"
+    },
+    {
+     "name": "testApplyWithHomeStillPersistsPhotosButNotHome (T10)",
+     "asserts": "basic+home(37.5,127.0)으로 apply → insertedPhotos 2, store.home.length 0 (apply는 home 미터치)"
+    },
+    {
+     "name": "testFreshActorReapplyIsIdempotent (T11, 적응)",
+     "asserts": "Swift cold-context 검증 — TS plain store에선 캐시 없음. apply(basic) 후 동일 store에 재호출 → inserted 0, updated 2, 카운트 2/1/1. 회귀용으로 유지"
+    },
+    {
+     "name": "testReconcileDeletesAbsentNonOverridePhoto (R1)",
+     "asserts": "reconcile(basic) → reconcile(p1Only: P1만 lat37.5/lon126.9/t100, region 11140 count1, trip T1 start100 end100) → deletedPhotos 1(P2). store photos === [P1]"
+    },
+    {
+     "name": "testReconcileKeepsAbsentOverridePhoto (R2)",
+     "asserts": "reconcile(basic), P2.userOverride=true 직접 설정 → reconcile(p1Only) → deletedPhotos 0, photos 2 (override 부재 보존)"
+    },
+    {
+     "name": "testReconcileDeletesAbsentNonOverrideRegion (R3)",
+     "asserts": "reconcile(basic) → reconcile(p1Only(region=11110)) → deletedRegions 1(11140 삭제). 남은 regionCode [\"11110\"]"
+    },
+    {
+     "name": "testReconcileKeepsAbsentOverrideRegion (R4)",
+     "asserts": "reconcile(basic), 11140 행 직접 변형 userOverride=true/state=wantToGo → reconcile(p1Only(region=11110)) → 11140 행 생존, state wantToGo"
+    },
+    {
+     "name": "testReconcileDeletesOrphanNonOverrideTrip (R5)",
+     "asserts": "reconcile(basic; T1) → P1,P2를 trip T2로 재배정한 결과(trips=[T2 start100 end200]) reconcile → deletedTrips 1(고아 T1). trips id === [T2]"
+    },
+    {
+     "name": "testReconcileKeepsAbsentOverrideTrip (R6)",
+     "asserts": "reconcile(basic), T1.userOverride=true 직접 설정 → R5와 동일한 T2 결과 reconcile → deletedTrips 0, trips id 정렬 [T1, T2]"
+    },
+    {
+     "name": "testReconcileIdempotent (R7)",
+     "asserts": "reconcile(basic) 2회 → 2회차 applied.inserted 0/updated 2, deletedPhotos 0, deletedRegions 0, deletedTrips 0. 카운트 2/1/1"
+    },
+    {
+     "name": "testReconcileUpsertAndDeleteTogether (R8)",
+     "asserts": "reconcile(basic) → 결과{P1(37.5,126.9,t100,region 11110,T1,sort0), P3(t150,region 11110,T1,sort1); regions [11110 count2 first100 last150]; trips [T1 start100 end150 rep 11110]} reconcile → inserted 1(P3), updated 1(P1), deletedPhotos 1(P2), deletedRegions 1(11140), regionsWritten 1. photos 정렬 [P1,P3], regions [11110]"
+    },
+    {
+     "name": "testReconcileEmptyResultDeletesAllNonOverride (R9)",
+     "asserts": "reconcile(basic) → reconcile(빈 결과 photos/regions/trips=[], home null) → deletedPhotos 2, deletedRegions 1, deletedTrips 1, inserted 0. store 전부 0"
+    },
+    {
+     "name": "testReconcileResegmentationNoDangling (R10)",
+     "asserts": "reconcile(basic; T1[P1,P2]) → P1→T2a(sort0)/P2→T2b(sort0), trips [T2a(100,100), T2b(200,200)] reconcile → deletedTrips 1(옛 T1). trips 집합 {T2a,T2b}, 모든 non-null PhotoRef.tripID가 존재 trip id에 포함(dangling 0)"
+    },
+    {
+     "name": "testReconcileOverridePhotoPinsTrip (R11)",
+     "asserts": "reconcile(basic), P1.userOverride=true(tripID T1 유지) → P1,P2 모두 T2로 분류한 결과(trips=[T2]) reconcile → deletedTrips 0 (T1은 비-override여도 생존 사진 P1이 참조 → 3중 AND 셋째항으로 면제). trips {T1,T2}, P1.tripID===\"T1\", dangling 0"
+    },
+    {
+     "name": "testReconcileDoesNotPruneSidoRows (R12)",
+     "asserts": "reconcile(basic; sigungu 11140) 후 store에 직접 insert: {regionCode \"11\", level \"sido\", state visited, photoCount 5} → reconcile(p1Only(region=11110)) → sido 행 \"11\" 보존(prune 후보 아님), sigungu 집합 {\"11110\"}(11140은 삭제)"
+    },
+    {
+     "name": "testReconcileFreshActorIdempotent (R13, 적응)",
+     "asserts": "cold-fetch 멱등 — TS에선 동일 store 재호출. reconcile(basic) 2회째: inserted 0/updated 2/deleted 0,0,0. 카운트 2/1/1. 회귀용"
+    },
+    {
+     "name": "testReconcilePersistsHome (H1)",
+     "asserts": "reconcile(basic+home(37.5,127.0)) → homeChanged true. store.home 1행 lat 37.5 lon 127.0, homeCoordinate() === {lat:37.5, lon:127.0}"
+    },
+    {
+     "name": "testReconcileUpdatesHome (H2)",
+     "asserts": "home(37.5,127.0) reconcile → home(35.1,129.0) reconcile → homeChanged true, 행 1개 lat 35.1 lon 129.0"
+    },
+    {
+     "name": "testReconcileSameHomeNoChange (H3)",
+     "asserts": "동일 home(37.5,127.0) reconcile 2회 → 2회차 homeChanged false, 행 1개"
+    },
+    {
+     "name": "testReconcileNilHomeClears (H4)",
+     "asserts": "home(37.5,127.0) 설정 후 home null 결과 reconcile → homeChanged true, store.home 0행, homeCoordinate() null"
+    },
+    {
+     "name": "testApplyDoesNotTouchHome (H5)",
+     "asserts": "reconcile(home 37.5,127.0) 후 apply(home 35.1,129.0) → home 그대로 1행 37.5/127.0"
+    },
+    {
+     "name": "testDeleteAllClearsHome (H6)",
+     "asserts": "reconcile(home 37.5,127.0) → deleteAll → home 0행, homeCoordinate() null"
+    },
+    {
+     "name": "testReconcileEnforcesSingleHomeRow (H7)",
+     "asserts": "reconcile(basic, home 없음) 후 store.home에 (1.0,1.0),(2.0,2.0) 2행 직접 push(폴리션) → reconcile(home 37.5,127.0) → 행 1개 37.5/127.0 (첫 행 덮고 나머지 삭제)"
+    },
+    {
+     "name": "testHomeReadableFromFreshActor (H8, 적응)",
+     "asserts": "reconcile(home 37.5,127.0) 후 homeCoordinate(store) === {37.5,127.0}. cold-actor 의미는 TS에서 trivial — 회귀용"
+    },
+    {
+     "name": "testSetWantToGoCreatesOverrideRow (WT1)",
+     "asserts": "빈 store에 setWantToGo(\"11140\", true) → 행 1개: regionCode 11140, level sigungu, state wantToGo, userOverride true, photoCount 0"
+    },
+    {
+     "name": "testSetWantToGoOffDeletesRow (WT2)",
+     "asserts": "on → off → regions 0행 (미방문 = 행 부재 불변식)"
+    },
+    {
+     "name": "testSetWantToGoIdempotent (WT3)",
+     "asserts": "on 2회 → 행 1개, state wantToGo 유지"
+    },
+    {
+     "name": "testWantToGoUpgradedToVisitedWhenPhotosAppear (WT4)",
+     "asserts": "setWantToGo(\"11140\", true) → reconcile(basic; 11140에 사진 2장) → 11140 행 1개: state visited(승격), userOverride false(해제), photoCount 2 — visited-wins 핵심"
+    },
+    {
+     "name": "testWantToGoSurvivesReconcileWhenAbsent (WT5)",
+     "asserts": "setWantToGo(\"26470\", true) → reconcile(basic; 26470 부재) → 26470 행 1개 생존, state wantToGo (userOverride prune 면제)"
+    },
+    {
+     "name": "testPinnedPhotoIDsReturnsOverridePhotos (PIN)",
+     "asserts": "apply(basic) → pinnedPhotoIDs() 빈 집합. P1.userOverride=true 직접 설정 → pinnedPhotoIDs() === {\"P1\"}"
+    },
+    {
+     "name": "testSetWantToGoNeverClobbersVisited (WT6)",
+     "asserts": "apply(basic; 11140 visited) → setWantToGo(true): state visited 유지 + userOverride false 유지(클로버 안 함) → setWantToGo(false): 행 1개 유지, state visited(삭제 금지)"
+    },
+    {
+     "name": "testPartialMissingRecalcsInPlacePreservingFields (P1)",
+     "asserts": "T1에 P1(37.1,127.1,t100)/P2(37.2,127.2,t200)/P3(37.3,127.3,t300) apply 후 핀(직접 변형: trip.userOverride=true, trip.title=\"내 여행\", 멤버 3장 userOverride=true) → pruneMissingPins({P1,P2}) → removedPhotos 1, recalcedTrips 1, deletedTrips 0. trip id [T1] 불변(제자리 recalc), title \"내 여행\" 보존, userOverride true 보존, startAt 100, endAt 200(300→200 축소), bbox (37.1,127.1,37.2,127.2), photos 집합 {P1,P2}"
+    },
+    {
+     "name": "testAllMissingDeletesTrip (P2)",
+     "asserts": "P1(t100)/P2(t200) 핀 후 pruneMissingPins(빈 Set) → removedPhotos 2, deletedTrips 1, recalcedTrips 0. trips 0, photos 0"
+    },
+    {
+     "name": "testNonOverrideMissingUntouched (P3)",
+     "asserts": "P1/P2 apply만(비핀, 전부 userOverride=false) → pruneMissingPins(빈 Set) → removedPhotos 0, deletedTrips 0. trip T1 유지, photos 2 유지 (비-override는 reconcile prune 담당)"
+    },
+    {
+     "name": "testPresentPinsPreserved (P4)",
+     "asserts": "P1/P2 핀 후 pruneMissingPins({P1,P2}) → removedPhotos 0. title \"내 여행\" 유지, endAt 200 유지(메트릭 미변), photos 2"
+    },
+    {
+     "name": "testNoMissingIsNoOp (P5)",
+     "asserts": "P1/P2 핀 후 pruneMissingPins({P1,P2,\"extra_unrelated\"}) → removedPhotos 0, recalcedTrips 0, deletedTrips 0 (early return 경로)"
+    },
+    {
+     "name": "testColdActorSeesPinnedData (P6, 적응)",
+     "asserts": "P1(t100)/P2(t200) 핀(title \"콜드\") → pruneMissingPins({P1}) → removedPhotos 1, recalcedTrips 1. title \"콜드\" 보존, endAt 100(P1만 생존). cold-actor 의미는 TS에서 trivial"
+    },
+    {
+     "name": "testIdempotentAcrossConsecutiveRuns (P7)",
+     "asserts": "P1/P2/P3(t100/200/300) 핀 → pruneMissingPins({P1}) 1회차(P2,P3 제거) → 2회차 동일 호출 → removedPhotos 0, recalcedTrips 0, deletedTrips 0. photos [P1]만, title \"내 여행\" 유지"
+    }
+   ],
+   "notes": "[범위] 포팅 대상: apply(upsert), reconcile(upsert+prune+home 동기화), 내부 prune, syncHome(단일행), setWantToGo(visited-wins 포함), pinnedPhotoIDs, pruneMissingPins, home(), deleteAll(리셋용), ApplyResult/ReconcileResult/PruneMissingResult. 제외: mergeTrips/splitTrip/setTripTitle/deleteTrip과 MergeResult/SplitResult/MergeError/TitleError/DeleteError/SplitError 전부(DataActor.swift 207~418행). DataActorTests의 모든 테스트는 in-scope. DataActorPruneMissingTests의 픽스처 titledPinnedT1은 제외 대상인 setTripTitle로 핀을 만들므로, TS 포트에서는 store 직접 변형(trip.userOverride=true + trip.title 설정 + 멤버 photo.userOverride=true)으로 동등 상태를 만든다.\n\n[함정]\n1. persistentModelID는 SwiftData 전용 — ApplyResult.tripPersistentIDs를 touchedTripIDs: string[](TripRecord.id, result.trips 순회 순서)로 대체. override로 upsert 스킵된 trip도 포함해야 함(Swift 코드에서 touchedTrips.append가 userOverride continue보다 먼저 실행 — T6이 이 이중 계약을 고정).\n2. Swift Dictionary(uniquingKeysWith: {first,_ in first})는 중복 키 시 첫 행 유지(first-wins). JS Map.set은 last-wins이므로 `if (!map.has(k)) map.set(k, v)`로 재현할 것 (photoByID/regionByCode/tripByID 3곳 + pruneMissingPins의 tripByID).\n3. visited-wins 분기 순서 정확히 보존: 기존 행이 userOverride일 때 state===\"wantToGo\"인 경우에만 userOverride=false로 해제 후 visited 승격+필드 갱신+regionsWritten++; 그 외 override는 continue(카운트 미증가, T5). 비-override 기존 행은 무조건 state=visited 덮어쓰기.\n4. prune은 upsert가 만든 사전(photoByID = 기존 store 전체 + 이번에 insert된 신규 행 포함)을 단일 패스 순회: 부재∧비override → 삭제, 그 외(생존)이고 tripID non-null → survivingTripRefs에 수집. override 사진은 upsert 스킵으로 사용자 tripID가 유지된 채 수집됨 → R11의 핵심. trip prune은 3중 AND: !tIDs.has(id) && !userOverride && !survivingTripRefs.has(id). 삭제 순서 사진→지역→여행.\n5. regionByCode 사전은 level===\"sigungu\"만 필터해 구성 → sido 행은 upsert/prune 양쪽 비후보(R12). setWantToGo의 기존 행 조회도 sigungu 한정.\n6. syncHome: before=store.home 스냅샷, beforeCoord=첫 행 좌표(없으면 null). coord non-null이면 첫 행에 lat/lon 덮어쓰고 나머지 행 전부 삭제(단일행 보장, H7), null이면 전행 삭제. homeChanged = beforeCoord !== coord 의미의 값 비교: 둘 다 null이면 false, 한쪽만 null이면 true, 둘 다 있으면 lat===lat && lon===lon의 부정(엄밀 float 동치 — Swift Coordinate Equatable과 동일, 허용오차 금지).\n7. apply는 home을 절대 건드리지 않음(H5/T10) — reconcile만 동기화.\n8. Date → epoch 초 number로 전면 치환. 비교/min/max는 number 산술. JS Date 객체·getHours·타임존 메서드 금지. PipelineRegion.firstVisit/lastVisit는 non-null, RegionStatusRecord에선 null 허용(setWantToGo 신규 행은 null).\n9. 옵셔널은 전부 `| null`로 통일(undefined 금지) — regionCode/tripID/representativeRegionCode/title/firstVisit/lastVisit. 동등성 비교 일관성 확보.\n10. pruneMissingPins: (1) toDelete = userOverride ∧ !rawAssetIDs.has(id), 비면 {0,0,0} early return(store 무변형, P5). (2) 생존자는 삭제 전 스냅샷(allPhotos)에서 계산 — 삭제 후 재조회 금지(Swift pending-delete 비일관 회피 의미론 유지). (3) trip recalc는 제자리 — id/title/userOverride 보존, startAt/endAt/bbox4필드/representativeRegionCode만 덮음(delete-and-reinsert 금지, P1의 🔴 단언). 생존 0이면 trip 삭제. TripMetrics.compute 의존(tripMetrics 모듈) — 비어있지 않은 입력은 non-null 보장이므로 TS에선 null이면 throw(fail-loud, Swift 강제 unwrap 대응).\n11. 정렬: in-scope 로직 내부에 정렬 없음(merge/split의 takenAt/sortIndex tie-break 정렬은 제외 범위). 테스트 검증부의 sortIndex 정렬만 필요. Swift Set/Dictionary 순회 순서는 비결정적이지만 in-scope 산출(카운트·삭제 집합)은 순서 독립 — JS Map/Set 삽입순 순회로 문제 없음.\n12. saveOrRollback/cold-context 멱등성(T11/R13/H8/P6)은 SwiftData 트랜잭션·캐시 전용 의미 — plain store에선 자동 충족. 테스트는 회귀용으로 단순화 포팅. in-scope 함수에는 save 전 throw 가드가 없어 롤백 메커니즘 불요.\n13. PhotoRefRecord 등 4개 record 인터페이스는 models 모듈 카드와 중복 정의 충돌 가능 — models가 정의하면 repo.ts는 거기서 import(필드 계약은 위 exportsTs 그대로 합의 필요).\n14. setWantToGo의 visited 보존은 on/off 양쪽 early return(WT6 — 데이터 손실 차단 blocker였음). off에서 행이 없으면 no-op."
+  },
+  {
+   "key": "models",
+   "ts": "src/data/db.ts 레코드 타입",
+   "constants": [
+    "VisitState.visited=\"visited\"",
+    "VisitState.wantToGo=\"wantToGo\"",
+    "VisitState.notVisited=\"notVisited\"",
+    "RegionLevel.sido=\"sido\"",
+    "RegionLevel.sigungu=\"sigungu\"",
+    "PhotoRef.sortIndex 기본값=0",
+    "PhotoRef.userOverride 기본값=false",
+    "PhotoRef.regionCode 기본값=null",
+    "PhotoRef.tripID 기본값=null",
+    "TripRecord.representativeRegionCode 기본값=null",
+    "TripRecord.userOverride 기본값=false",
+    "TripRecord.title 기본값=null",
+    "RegionStatus.state 기본값=\"notVisited\"",
+    "RegionStatus.photoCount 기본값=0",
+    "RegionStatus.firstVisit/lastVisit 기본값=null",
+    "RegionStatus.userOverride 기본값=false",
+    "HOME_CACHE_ROW_ID=1 (TS 포팅 결정: 단일행 고정 PK — Swift엔 없음, DataActor가 단일행 불변 보장)"
+   ],
+   "deps": [
+    "geoTypes"
+   ],
+   "exportsTs": "// src/data/db.ts — models: SwiftData @Model → plain TS interface (레코드 타입)\nimport type { Coordinate, BBox } from \"../core/geoTypes\";\n\n/** Swift VisitState (VisitState.swift): String RawValue 그대로 보존.\n *  단일 정의 지점 — regionAggregate는 여기서 import (중복 정의 금지). */\nexport type VisitState = \"visited\" | \"wantToGo\" | \"notVisited\";\nexport const VISIT_STATES: readonly VisitState[] = [\"visited\", \"wantToGo\", \"notVisited\"];\n\nexport type RegionLevel = \"sido\" | \"sigungu\";\n\n/** 사진 1장 분석 참조. 두 탭이 공유하는 독립 aggregate root. */\nexport interface PhotoRef {\n  localIdentifier: string;        // dedup 키 (Swift #Unique 미사용 — 파이프라인 수동 dedup)\n  lat: number;\n  lon: number;\n  takenAt: number;                // epoch 초 (Swift Date.timeIntervalSince1970) — ms 아님!\n  localTZoffsetSeconds: number;   // 정수 (예: 32400 = +09:00)\n  regionCode: string | null;\n  tripID: string | null;          // TripRecord.id 약참조 — cascade/nullify 없음\n  sortIndex: number;              // 읽기 시 정렬 키\n  userOverride: boolean;          // true면 자동 재반영이 덮어쓰지 않음\n}\n\n/** 영속 여행 엔티티. tripSegmenter의 순수 값 타입 Trip과 다른 타입 (이름 충돌 주의). */\nexport interface TripRecord {\n  id: string;                     // PhotoRef.tripID 약참조 대상\n  startAt: number;                // epoch 초\n  endAt: number;                  // epoch 초\n  minLat: number;\n  minLon: number;\n  maxLat: number;\n  maxLon: number;\n  representativeRegionCode: string | null;\n  userOverride: boolean;          // 수동 병합/분리/이동 시 true → 자동 재세그먼테이션 금지\n  title: string | null;           // V3 가산 필드. 제목 설정 = 핀(userOverride)\n}\n\n/** 한 지역(시도/시군구)의 방문 상태 집계. 지역지도 색칠 소스. */\nexport interface RegionStatus {\n  regionCode: string;             // 식별자 (수동 dedup)\n  level: RegionLevel;\n  state: VisitState;\n  photoCount: number;\n  firstVisit: number | null;      // epoch 초\n  lastVisit: number | null;       // epoch 초\n  userOverride: boolean;          // 가고싶음 수동 지정 등 → 자동 재집계 금지\n}\n\n/** 영속 home 좌표. store에 단일 행(≤1). 로그·외부전송 절대 금지. */\nexport interface HomeCache {\n  id: typeof HOME_CACHE_ROW_ID;   // 고정 PK=1 (단일행 불변을 스키마로 자연화)\n  lat: number;\n  lon: number;\n}\nexport const HOME_CACHE_ROW_ID = 1;\n\n// ---- Swift 계산 프로퍼티 → 순수 함수 (IndexedDB 왕복은 prototype/getter를 제거하므로 클래스 금지) ----\nexport function photoRefCoordinate(p: Pick<PhotoRef, \"lat\" | \"lon\">): Coordinate {\n  return { lat: p.lat, lon: p.lon };\n}\nexport function tripRecordBBox(t: Pick<TripRecord, \"minLat\" | \"minLon\" | \"maxLat\" | \"maxLon\">): BBox {\n  return { minLat: t.minLat, minLon: t.minLon, maxLat: t.maxLat, maxLon: t.maxLon };\n}\nexport function homeCacheCoordinate(h: Pick<HomeCache, \"lat\" | \"lon\">): Coordinate {\n  return { lat: h.lat, lon: h.lon };\n}\n\n// ---- Swift init 기본값 보존 팩토리 ----\nexport function makePhotoRef(args: {\n  localIdentifier: string; lat: number; lon: number;\n  takenAt: number; localTZoffsetSeconds: number;\n  regionCode?: string | null; tripID?: string | null;\n  sortIndex?: number; userOverride?: boolean;\n}): PhotoRef; // 기본: regionCode=null, tripID=null, sortIndex=0, userOverride=false\n\nexport function makeTripRecord(args: {\n  id: string; startAt: number; endAt: number;\n  minLat: number; minLon: number; maxLat: number; maxLon: number;\n  representativeRegionCode?: string | null; userOverride?: boolean; title?: string | null;\n}): TripRecord; // 기본: representativeRegionCode=null, userOverride=false, title=null\n\nexport function makeRegionStatus(args: {\n  regionCode: string; level: RegionLevel;\n  state?: VisitState; photoCount?: number;\n  firstVisit?: number | null; lastVisit?: number | null; userOverride?: boolean;\n}): RegionStatus; // 기본: state=\"notVisited\", photoCount=0, firstVisit=null, lastVisit=null, userOverride=false\n\n// ---- BaljachwiSchema 대응: DB 경계 (Dexie 가정) ----\n// 테이블 4개. SwiftData 자동 경량 마이그레이션 이력(V1→V3 가산)은 TS 신규 스키마와 무관 — version(1)에 전 필드 포함.\n//   photoRefs:      PK localIdentifier, index [tripID, sortIndex] (tripID equals 쿼리 + sortIndex 정렬용)\n//   tripRecords:    PK id\n//   regionStatuses: PK regionCode, index level\n//   homeCache:      PK id (단일행, 항상 id=1 upsert)\nexport declare class BaljachwiDB /* extends Dexie */ {\n  photoRefs: /* Table<PhotoRef, string> */ unknown;\n  tripRecords: /* Table<TripRecord, string> */ unknown;\n  regionStatuses: /* Table<RegionStatus, string> */ unknown;\n  homeCache: /* Table<HomeCache, number> */ unknown;\n  constructor(name?: string); // 테스트는 fake-indexeddb로 인메모리 (inMemoryContainer 대응)\n}",
+   "module": "models",
+   "notes": "[VisitState 정의 위치] Swift에선 VisitState.swift 별도 파일이며 RegionStatus(models)와 RegionAggregate(regionAggregate)가 공유한다. 이 카드가 models에서 단일 정의로 export하므로 regionAggregate는 models에서 import해야 함 — 두 모듈에 중복 정의 금지. [Date→epoch 초] 모든 Date 필드(takenAt/startAt/endAt/firstVisit/lastVisit)는 epoch '초' number. 테스트 픽스처 Date(timeIntervalSince1970: N) = N초 그대로. JS Date.now()는 ms이므로 혼용 금지 — 이 모듈에선 Date 객체 자체를 쓰지 말 것. [옵셔널] Swift Optional → `| null` 고정 (undefined 금지: IndexedDB structured clone과 인덱스 동작이 null/undefined에서 다름. tripID가 null인 행은 tripID 인덱스에서 빠지지만 equals('T1') 쿼리엔 영향 없음). [@Model→interface] 계산 프로퍼티(coordinate/bbox)는 클래스 getter가 아닌 순수 함수로 — IndexedDB 왕복 후 객체는 plain object라 getter가 사라짐. 동등성 비교는 필드별(vitest toEqual), 참조 비교 금지. [#Unique 미사용] Swift는 dedup을 파이프라인이 수동 통제. Dexie에서 localIdentifier/regionCode/id를 PK로 쓰면 put()이 자동 upsert가 되어 의미가 약간 강해지지만 dataActorReconcile의 upsert 의미와 일치하므로 허용 — 단 add()(중복 시 throw)와 put() 구분에 주의. [cascade/nullify 금지] TripRecord 삭제 시 PhotoRef 보존 + tripID 유지는 TS에선 관계 기계가 없어 자동 성립하지만, 계약 고정용으로 테스트를 반드시 포팅(파이프라인이 명시적으로 정리한다는 전제). [정렬] sortIndex는 숫자 비교 (a,b)=>a.sortIndex-b.sortIndex — 문자열 비교 금지(10<9 버그). Array.sort는 ES2019+ 안정 정렬이라 동률 시 삽입 순서 보존(SortDescriptor와 동일). Dexie 인덱스 orderBy도 가능. [HomeCache] 단일행 불변은 Swift에선 스키마가 아니라 DataActor(sole writer)가 보장 — TS는 고정 PK id=1 upsert로 자연화(HOME_CACHE_ROW_ID=1은 포팅 결정 사항). 집 좌표는 민감정보: 로그/외부전송 금지 주석 유지. [테스트 격리] ModelTests는 컨테이너 1개 공유 + 테스트마다 전체 삭제 패턴 — TS도 DB 1개 공유 + beforeEach에서 4개 table.clear()로 동일하게. [BBox 출처] Swift에선 BBox가 TripSegmenter.swift에 정의되어 있으나 TS에선 합의대로 geoTypes에서 import. [dataActorReconcile 범위] dataActorReconcile 모듈은 reconcile/upsert/prune/visited-wins/단일행 home에 해당하는 로직과 테스트만 포팅 대상으로 추리고 merge/split/title/delete는 제외한다 — 이 models 레코드 타입들이 그 부분집합의 계약 기반(특히 userOverride/visited-wins는 RegionStatus.state·userOverride 필드, 단일행 home은 HomeCache+HOME_CACHE_ROW_ID에 의존).",
+   "testsToPort": [
+    {
+     "name": "visitStateRawValueAndCases",
+     "asserts": "VisitState 'visited'의 직렬화 값이 정확히 문자열 \"visited\"; 문자열 \"wantToGo\"에서 역직렬화 시 wantToGo; 전체 케이스 집합 = {visited, wantToGo, notVisited} 정확히 3개 (VISIT_STATES 배열로 검증)"
+    },
+    {
+     "name": "photoRefCoordinateComputed",
+     "asserts": "makePhotoRef({localIdentifier:\"A\", lat:37.5, lon:127.0, takenAt:0, localTZoffsetSeconds:32400}) → photoRefCoordinate(p) deep-equals {lat:37.5, lon:127.0}; p.userOverride === false (기본값)"
+    },
+    {
+     "name": "photoRefInsertAndFetch",
+     "asserts": "DB에 PhotoRef{localIdentifier:\"A\", lat:37.5, lon:127.0, takenAt:10, localTZoffsetSeconds:32400} 1건 insert 후 전체 fetch → count 1, first.localIdentifier === \"A\""
+    },
+    {
+     "name": "regionStatusVisitStatePersists",
+     "asserts": "RegionStatus{regionCode:\"11140\", level:\"sigungu\", state:\"visited\", photoCount:3} insert→save→fetch 왕복 후 count 1, state === \"visited\" (문자열 영속), photoCount === 3"
+    },
+    {
+     "name": "tripRecordBBoxComputed",
+     "asserts": "makeTripRecord({id:\"T1\", startAt:0, endAt:100, minLat:35.0, minLon:129.0, maxLat:35.2, maxLon:129.2}) → tripRecordBBox(t) deep-equals {minLat:35.0, minLon:129.0, maxLat:35.2, maxLon:129.2}"
+    },
+    {
+     "name": "deletingTripRecordPreservesPhotoRefs",
+     "asserts": "TripRecord{id:\"T1\", startAt:0, endAt:100, bbox 0,0,1,1} + PhotoRef{localIdentifier:\"P1\", lat:0.5, lon:0.5, takenAt:10, tz:32400, tripID:\"T1\"} 저장 → TripRecord만 삭제 → trips count 0, photos count 1 (cascade 없음), photo.tripID === \"T1\" 유지 (약참조 — 자동 nullify 없음, 파이프라인이 명시 정리)"
+    },
+    {
+     "name": "photoRefsSortedBySortIndex",
+     "asserts": "의도적 역순 삽입: (\"c\",sortIndex 2), (\"a\",0), (\"b\",1) 모두 tripID \"T1\", lat/lon/takenAt/tz 전부 0 → tripID===\"T1\" 쿼리 + sortIndex 오름차순 정렬 → localIdentifier 순서 정확히 [\"a\",\"b\",\"c\"]"
+    },
+    {
+     "name": "userOverrideSettable",
+     "asserts": "PhotoRef{localIdentifier:\"A\", lat:0, lon:0, takenAt:0, tz:0, userOverride:true} 저장→fetch 왕복 후 userOverride === true (boolean 영속)"
+    }
+   ]
+  }
+ ],
+ "missing": []
+}
