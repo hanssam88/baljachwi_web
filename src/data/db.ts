@@ -47,3 +47,14 @@ export class BaljachwiDB extends Dexie {
     });
   }
 }
+
+// ── 앱 싱글턴 (lazy) ──────────────────────────────────────────────────
+// SSR 가드: 모듈 스코프에서 즉시 인스턴스화하지 않는다. Next App Router 의 프리렌더 단계에서
+// IndexedDB 가 없어도 import 가 안전하도록, 첫 접근(클라이언트) 시점에만 생성한다.
+let _db: BaljachwiDB | null = null;
+
+/** 앱 전역 DB 인스턴스. 첫 호출 시 생성(클라이언트 전용). 모든 쓰기는 repo.ts 경유. */
+export function getDB(): BaljachwiDB {
+  if (_db === null) _db = new BaljachwiDB();
+  return _db;
+}
