@@ -37,3 +37,6 @@ yarn-error.log*
 # 채우기: BALJACHWI_IOS_ROOT=../baljachwi npm run copy-geo && npm run gen-choropleth
 /public/geo/*
 !/public/geo/.gitkeep
+
+# 검증용 지오태그 샘플(생성물)
+samples/
