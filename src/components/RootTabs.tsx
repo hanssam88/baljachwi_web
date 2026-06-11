@@ -26,23 +26,36 @@ const tabId = (k: TabKey) => `tab-${k}`;
  */
 export function RootTabs() {
   const [active, setActive] = useState<TabKey>('region');
+  const [reimport, setReimport] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
   const photoCount = useLive(() => getDB().photoRefs.count(), []);
   const hasPhotos = (photoCount ?? 0) > 0;
+  // 첫 온보딩(사진 없음) 또는 재업로드 진입 시 중앙정렬 카드 레이아웃.
+  const showOnboarding = !hasPhotos || reimport;
 
   return (
     <div style={shell}>
+      {hasPhotos && (
+        <header style={topbar}>
+          <button type="button" style={topBtn} onClick={() => setReimport((v) => !v)}>
+            {reimport ? '← 지도로' : '← 사진 업로드'}
+          </button>
+        </header>
+      )}
+
       <main
         id={PANEL_ID}
-        style={hasPhotos ? contentFill : content}
+        style={showOnboarding ? content : contentFill}
         role="tabpanel"
         aria-labelledby={tabId(active)}
         aria-label={TABS.find((t) => t.key === active)?.label}
       >
         {!mounted ? null : !hasPhotos ? (
           <ImportOnboarding />
+        ) : reimport ? (
+          <ImportOnboarding mode="apply" onImported={() => setReimport(false)} />
         ) : active === 'region' ? (
           <RegionMapScreen />
         ) : (
@@ -77,6 +90,23 @@ const shell: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   minHeight: '100dvh',
+};
+
+// 상단 헤더(사진 있을 때 양쪽 탭 공통) — 재업로드 토글 버튼.
+const topbar: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  padding: 'var(--space-2) var(--space-3)',
+  borderBottom: '1px solid var(--separator)',
+  background: 'var(--surface)',
+};
+const topBtn: CSSProperties = {
+  border: 'none',
+  background: 'transparent',
+  color: 'var(--accent)',
+  fontSize: 15,
+  fontWeight: 600,
+  cursor: 'pointer',
 };
 
 // 온보딩(빈 상태)은 중앙 정렬, 지도(채움)는 전체 채움.
