@@ -20,6 +20,12 @@ export function usePhotosForTrip(tripID: string): PhotoRef[] | undefined {
   return useLive(() => getDB().photoRefs.where('tripID').equals(tripID).sortBy('sortIndex'), [tripID]);
 }
 
+/** 전체 PhotoRef(여행 미소속 loose 사진 포함). 미마운트/로딩 중이면 undefined.
+ *  takenAt 비인덱스 → orderBy 불가, toArray()로 조회(마커맵은 순서 무관). */
+export function useAllPhotos(): PhotoRef[] | undefined {
+  return useLive(() => getDB().photoRefs.toArray(), []);
+}
+
 /** region_codes.json → regionCode→표시명 맵(1회 fetch). */
 export function useRegionNames(): Record<string, string> {
   const [names, setNames] = useState<Record<string, string>>({});
