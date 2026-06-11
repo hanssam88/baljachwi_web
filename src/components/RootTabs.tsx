@@ -74,7 +74,11 @@ export function RootTabs() {
               role="tab"
               aria-selected={selected}
               aria-controls={PANEL_ID}
-              onClick={() => setActive(t.key)}
+              onClick={() => {
+                // 재업로드 중 탭 클릭 = 해당 지도 보기 의도 → reimport 해제 후 전환(리뷰 반영).
+                setReimport(false);
+                setActive(t.key);
+              }}
               style={{ ...tab, color: selected ? 'var(--accent)' : 'var(--label2)' }}
             >
               {t.label}

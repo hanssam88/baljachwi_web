@@ -35,4 +35,14 @@ describe('RootTabs 재업로드(F1)', () => {
     expect(screen.queryByText('가져오기화면')).not.toBeInTheDocument();
     expect(screen.getByText('지역화면')).toBeInTheDocument();
   });
+
+  it('재업로드 중 하단 탭 클릭 → reimport 해제 후 해당 지도 표시(리뷰 반영)', async () => {
+    const user = userEvent.setup();
+    render(<RootTabs />);
+    await user.click(screen.getByRole('button', { name: /사진 업로드/ }));
+    expect(screen.getByText('가져오기화면')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: '경로지도' }));
+    expect(screen.queryByText('가져오기화면')).not.toBeInTheDocument();
+    expect(screen.getByText('여행화면')).toBeInTheDocument();
+  });
 });
