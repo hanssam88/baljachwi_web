@@ -9,8 +9,9 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import type { TripRecord } from '@/data/models';
 import { usePhotosForTrip } from '@/hooks/useTrips';
 import { repo } from '@/data/repo';
+import { hasTileConsent, setTileConsent } from '@/components/map/tileConsent';
+import { TileNotice } from '@/components/map/TileNotice';
 
-const TILE_NOTICE_KEY = 'baljachwi-tile-notice-ack';
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
 const MIN_SPAN = 0.01; // ≈1km — 단일/근접 사진 과도 줌 방지(iOS minSpan)
 
@@ -26,8 +27,7 @@ export function TripMapView({ trip, onBack }: { trip: TripRecord; onBack: () => 
 
   // 최초 진입 1회 타일 고지.
   useEffect(() => {
-    const seen = typeof localStorage !== 'undefined' && localStorage.getItem(TILE_NOTICE_KEY);
-    if (seen) setAck(true);
+    if (hasTileConsent()) setAck(true);
     else setNeedNotice(true);
   }, []);
 
@@ -125,7 +125,7 @@ export function TripMapView({ trip, onBack }: { trip: TripRecord; onBack: () => 
   }, [ack, trip.id, photosKey]);
 
   const acceptNotice = () => {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(TILE_NOTICE_KEY, '1');
+    setTileConsent();
     setNeedNotice(false);
     setAck(true);
   };
@@ -144,20 +144,7 @@ export function TripMapView({ trip, onBack }: { trip: TripRecord; onBack: () => 
       ) : (
         <div style={mapWrap}>
           <div ref={mapEl} style={mapBox} />
-          {needNotice && (
-            <div style={noticeOverlay} role="dialog" aria-label="외부 타일 고지">
-              <div style={noticeCard}>
-                <p style={noticeText}>
-                  지도 타일을 외부 서버(OpenFreeMap)에서 불러오므로, 보고 있는 지역의 대략적
-                  위치가 타일 서버에 전달될 수 있습니다. 사진 파일·정확한 GPS 좌표·식별자는
-                  전송되지 않습니다.
-                </p>
-                <button type="button" style={noticeBtn} onClick={acceptNotice}>
-                  확인
-                </button>
-              </div>
-            </div>
-          )}
+          {needNotice && <TileNotice onAccept={acceptNotice} />}
         </div>
       )}
     </div>
@@ -189,37 +176,4 @@ const empty: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   color: 'var(--label2)',
-};
-const noticeOverlay: CSSProperties = {
-  position: 'absolute',
-  inset: 0,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: 'rgba(0,0,0,0.35)',
-  padding: 'var(--space-5)',
-};
-const noticeCard: CSSProperties = {
-  maxWidth: 320,
-  background: 'var(--surface)',
-  borderRadius: 'var(--radius-lg)',
-  padding: 'var(--space-5)',
-  textAlign: 'center',
-};
-const noticeText: CSSProperties = {
-  margin: 0,
-  fontSize: 15,
-  lineHeight: 1.5,
-  color: 'var(--label)',
-};
-const noticeBtn: CSSProperties = {
-  marginTop: 'var(--space-4)',
-  padding: '8px 24px',
-  border: 'none',
-  borderRadius: 'var(--radius-md)',
-  background: 'var(--accent)',
-  color: '#fff',
-  fontSize: 15,
-  fontWeight: 600,
-  cursor: 'pointer',
 };
