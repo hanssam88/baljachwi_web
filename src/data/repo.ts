@@ -11,6 +11,7 @@ import { getDB } from '@/data/db';
 import type { PipelineResult } from '@/core/scanPipeline';
 import { createEmptyStore, pinnedPhotoIDs as storePinnedIDs, type DataStore } from '@/data/storeOps';
 import { reconcile, apply, type ReconcileResult, type ApplyResult } from '@/data/reconcile';
+import { deletePhotosFromStore } from '@/data/deleteOps';
 import type { PhotoRef, TripRecord, RegionStatus } from '@/data/models';
 import { HOME_CACHE_ROW_ID } from '@/data/models';
 
@@ -109,6 +110,22 @@ export function makeRepo(db: BaljachwiDB) {
             db.homeCache.clear(),
             db.thumbs.clear(),
           ]);
+        },
+      );
+    },
+
+    /** 사용자 사진 삭제(단건/일괄). 생존 사진으로 sigungu 지역 재계산 + 썸네일 제거.
+     *  5 테이블 rw 트랜잭션(배열 형태) — writeBack 4테이블 + thumbs bulkDelete. */
+    async deletePhotos(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await db.transaction(
+        'rw',
+        [db.photoRefs, db.regionStatuses, db.tripRecords, db.homeCache, db.thumbs],
+        async () => {
+          const store = await loadStore(db);
+          deletePhotosFromStore(store, ids);
+          await writeBack(db, store);
+          await db.thumbs.bulkDelete(ids);
         },
       );
     },
