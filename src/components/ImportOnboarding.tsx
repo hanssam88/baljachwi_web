@@ -27,6 +27,19 @@ export function ImportOnboarding({
     }
   }, [state.phase, onImported]);
 
+  // 데스크톱(정밀 포인터)만 폴더 선택(webkitdirectory). iOS 등 coarse 포인터는 plain input →
+  // "사진 가져오기" 탭 시 사진 라이브러리(사진 앱)가 열린다. (iOS Safari는 webkitdirectory 미지원.)
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const fine =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(pointer: fine)').matches;
+    if (fine) el.setAttribute('webkitdirectory', '');
+    else el.removeAttribute('webkitdirectory');
+  }, []);
+
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
     setDragOver(false);
@@ -59,8 +72,6 @@ export function ImportOnboarding({
           type="file"
           accept="image/*"
           multiple
-          // @ts-expect-error 비표준 — 폴더 선택(모바일 폴백은 multiple)
-          webkitdirectory=""
           hidden
           onChange={(e) => {
             const files = pickImages(e.target.files);
