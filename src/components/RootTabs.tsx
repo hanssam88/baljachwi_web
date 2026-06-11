@@ -6,13 +6,15 @@ import { useLive } from '@/hooks/useLive';
 import { getDB } from '@/data/db';
 import { ImportOnboarding } from '@/components/ImportOnboarding';
 import { RegionMapScreen } from '@/components/region/RegionMapScreen';
+import { RouteMapScreen } from '@/components/trip/RouteMapScreen';
 import { TripListScreen } from '@/components/trip/TripListScreen';
 
-type TabKey = 'region' | 'trip';
+type TabKey = 'region' | 'route' | 'trips';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'region', label: '지역지도' },
-  { key: 'trip', label: '경로지도' },
+  { key: 'route', label: '경로지도' },
+  { key: 'trips', label: '여행 목록' },
 ];
 
 // WAI-ARIA tabs 패턴 — 탭↔패널 연결용 안정 id.
@@ -20,8 +22,8 @@ const PANEL_ID = 'root-tabpanel';
 const tabId = (k: TabKey) => `tab-${k}`;
 
 /**
- * iOS RootTabView 의 웹 대응 — 지역지도 / 경로지도 2탭 셸.
- * DB에 사진이 없으면 두 탭 모두 가져오기 온보딩을, 있으면 각 지도를 보여준다.
+ * iOS RootTabView 의 웹 대응 — 지역지도 / 경로지도 / 여행 목록 3탭 셸.
+ * DB에 사진이 없으면 모든 탭이 가져오기 온보딩을, 있으면 각 화면을 보여준다.
  * SSR 가드: 마운트 후에만 IndexedDB(useLive) 구독 — 프리렌더 단계 안전.
  */
 export function RootTabs() {
@@ -58,6 +60,8 @@ export function RootTabs() {
           <ImportOnboarding mode="apply" onImported={() => setReimport(false)} />
         ) : active === 'region' ? (
           <RegionMapScreen />
+        ) : active === 'route' ? (
+          <RouteMapScreen />
         ) : (
           <TripListScreen />
         )}
