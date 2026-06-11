@@ -7,10 +7,10 @@
 가져오기 → 지역지도 → 경로지도 풀 플로우 동작. 코어 15모듈 byte-faithful 포팅(골든 테스트 290건 통과).
 
 - ✅ **가져오기**: 파일선택/드롭존 + 진행률, exifr EXIF 파싱, Web Worker(12MB geojson 매칭 + 여행 분할)
-- ✅ **지역지도**: 사전생성 SVG path 색칠, 정복률 헤더("시군구 n/255 정복 · m%"), 시군구/시도 토글, 줌/팬, 범례
+- ✅ **지역지도**: 사전생성 SVG path 색칠, 정복률 헤더("시군구 n/296 정복 · m%"; 제주 읍면동 세분화 반영), 시군구/시도 토글, 줌/팬, 범례
 - ✅ **경로지도**: 여행 목록(최신순), MapLibre 지연 로드 경로지도(썸네일 핀 + 경로선 + bbox 카메라), 외부 타일 고지
 - ✅ **영속화**: Dexie(IndexedDB) — 새로고침 후 유지
-- ⏳ **이후 세션**(스펙대로): 여행 편집(분리/병합/제목/삭제) · 지역 상세 시트/가고싶음 · 백업 · HEIC 썸네일 · 다크모드 · E2E 확장 · 배포. 리뷰 후속은 [`docs/todos/2026-06-10-review-followup.md`](docs/todos/2026-06-10-review-followup.md).
+- ⏳ **이후 세션**(스펙대로): 여행 편집(분리/병합/제목/삭제) · 지역 상세 시트/가고싶음 · 백업 · HEIC 썸네일 · 다크모드 · E2E 확장 · 배포. 리뷰 후속은 [`docs/todos/2026-06-10-review-followup.md`](docs/todos/2026-06-10-review-followup.md) · [`docs/todos/2026-06-11-jeju-emd-followup.md`](docs/todos/2026-06-11-jeju-emd-followup.md).
 
 ## 기술 스택
 
@@ -55,3 +55,10 @@ docs/specs/      설계 스펙
 ## 설계 스펙
 
 [`docs/specs/2026-06-10-web-port-design.md`](docs/specs/2026-06-10-web-port-design.md)
+
+## 데이터 출처 / 라이선스 고지
+
+본 앱에 동봉·재배포되는 경계 데이터의 출처입니다.
+
+- **한국 시군구/시도 경계 + 사전생성 SVG path** — iOS 코어 [`baljachwi`](https://github.com/hanssam88/baljachwi) 번들(통계청 행정구역 경계 기반).
+- **제주 읍·면·동 경계** (`assets/geo/jeju-emd.geojson`, `public/geo/jeju-emd.geojson`) — [vuski/admdongkor](https://github.com/vuski/admdongkor) `ver20260201` (통계청 SGIS 행정동 경계 가공). **라이선스: [공공누리 제1유형(출처표시)](https://www.kogl.or.kr/info/license.do)** — 출처를 명시하면 상업적 이용·변형·재배포 가능. 본 고지가 그 출처표시 의무를 충족한다. 재현 스크립트: `scripts/build-jeju-emd.mjs`.
