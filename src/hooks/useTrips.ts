@@ -2,11 +2,12 @@
 
 // src/hooks/useTrips.ts — 여행 목록(최신순) + regionCode→표시명 맵(RegionNames).
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLive } from '@/hooks/useLive';
 import { getDB } from '@/data/db';
 import { RegionNames } from '@/core/regionNames';
 import { geoUrl } from '@/lib/geoUrl';
+import { groupPhotosByDay, type DayGroup } from '@/lib/dayGroups';
 import type { RegionCodeEntry } from '@/core/geoDataStore';
 import type { TripRecord, PhotoRef } from '@/data/models';
 
@@ -24,6 +25,12 @@ export function usePhotosForTrip(tripID: string): PhotoRef[] | undefined {
  *  takenAt 비인덱스 → orderBy 불가, toArray()로 조회(마커맵은 순서 무관). */
 export function useAllPhotos(): PhotoRef[] | undefined {
   return useLive(() => getDB().photoRefs.toArray(), []);
+}
+
+/** 전체 사진 → 현지 날짜별 그룹(최신순). 로딩 중이면 undefined. */
+export function useDayGroups(): DayGroup[] | undefined {
+  const photos = useAllPhotos();
+  return useMemo(() => (photos === undefined ? undefined : groupPhotosByDay(photos)), [photos]);
 }
 
 /** region_codes.json → regionCode→표시명 맵(1회 fetch). */
