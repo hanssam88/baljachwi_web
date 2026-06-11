@@ -34,6 +34,7 @@ export function PhotoMapView({ photos, onBack, title, onAfterDelete }: PhotoMapV
   const [selected, setSelected] = useState<PhotoRef | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // liveQuery는 매 발화마다 새 배열 참조를 emit → 사진 '집합'이 실제로 바뀔 때만 effect 재생성.
   const photosKey = useMemo(() => photos.map((p) => p.localIdentifier).join(','), [photos]);
@@ -43,10 +44,11 @@ export function PhotoMapView({ photos, onBack, title, onAfterDelete }: PhotoMapV
     else setNeedNotice(true);
   }, []);
 
-  // 사진 집합이 바뀌면(삭제·탭 전환 등) 선택/확인 상태 리셋.
+  // 사진 집합이 바뀌면(삭제·탭 전환 등) 선택/확인/에러 상태 리셋.
   useEffect(() => {
     setSelected(null);
     setConfirming(false);
+    setError(null);
   }, [photosKey]);
 
   useEffect(() => {
@@ -167,11 +169,16 @@ export function PhotoMapView({ photos, onBack, title, onAfterDelete }: PhotoMapV
   const doDelete = async () => {
     if (!selected || busy) return;
     setBusy(true);
+    setError(null);
     try {
       await repo().deletePhotos([selected.localIdentifier]);
       setSelected(null);
       setConfirming(false);
       onAfterDelete?.(); // 스냅샷 뷰(여행목록)는 닫힘. 라이브 뷰(경로지도)는 liveQuery가 갱신.
+    } catch {
+      // 비가역 작업 실패 → 무음 무시 금지. 확인창 닫고 선택 유지(재시도 가능) + 에러 노출(M-2).
+      setConfirming(false);
+      setError('삭제에 실패했습니다. 다시 시도해 주세요.');
     } finally {
       setBusy(false);
     }
@@ -191,6 +198,7 @@ export function PhotoMapView({ photos, onBack, title, onAfterDelete }: PhotoMapV
         <div style={mapWrap}>
           <div ref={mapEl} style={mapBox} />
           {needNotice && <TileNotice onAccept={acceptNotice} />}
+          {error && <div style={errorBanner} role="alert">{error}</div>}
           {selected && !confirming && (
             <div style={actionBar}>
               {/* disabled={busy}: 삭제 진행 중 stale 핀 재클릭 방지(H-1). 빠른 재클릭은 Task 10 실측 확인. */}
@@ -230,6 +238,12 @@ const empty: CSSProperties = {
 const actionBar: CSSProperties = {
   position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', gap: 'var(--space-3)',
   padding: 'var(--space-3)', background: 'var(--surface)', borderTop: '1px solid var(--separator)', zIndex: 10,
+};
+// 삭제 실패 시 상단 토스트. 액션바(하단)와 겹치지 않게 위쪽 배치. 다음 photosKey 변동/재시도 시 해제.
+const errorBanner: CSSProperties = {
+  position: 'absolute', left: 'var(--space-3)', right: 'var(--space-3)', top: 'var(--space-3)',
+  padding: 'var(--space-2) var(--space-3)', background: '#C2453A', color: '#fff',
+  fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', textAlign: 'center', zIndex: 15,
 };
 const delPinBtn: CSSProperties = {
   flex: 1, padding: '12px 0', border: 'none', borderRadius: 'var(--radius-md)',

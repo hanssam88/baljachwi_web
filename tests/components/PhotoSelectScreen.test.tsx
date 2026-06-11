@@ -57,6 +57,19 @@ describe('PhotoSelectScreen', () => {
     expect(deletePhotos).toHaveBeenCalledWith(['a', 'b']); // Set 삽입 순서 보존
     await waitFor(() => expect(onDeleted).toHaveBeenCalled());
   });
+  it('삭제 실패 → 에러 메시지 노출 + onDeleted 미호출 + 선택 유지(재시도 가능)', async () => {
+    deletePhotos.mockRejectedValueOnce(new Error('boom'));
+    const onDeleted = vi.fn();
+    const user = userEvent.setup();
+    render(<PhotoSelectScreen title="t" photos={[p('a'), p('b')]} onDeleted={onDeleted} onBack={() => {}} />);
+    await user.click(screen.getByRole('button', { name: '사진 선택 a' }));
+    await user.click(screen.getByRole('button', { name: /삭제 \(1\)/ }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '삭제' }));
+    await waitFor(() => expect(screen.getByText(/삭제에 실패/)).toBeInTheDocument());
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /삭제 \(1\)/ })).toBeEnabled(); // 선택 유지 → 재시도 가능
+  });
   it('확인 다이얼로그 취소 → deletePhotos 미호출', async () => {
     const onDeleted = vi.fn();
     const user = userEvent.setup();

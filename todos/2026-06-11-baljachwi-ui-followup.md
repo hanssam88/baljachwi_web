@@ -75,3 +75,40 @@
 - [x] **`tripDisplayName` 입력 정렬 계약 오해 제거** (`DayGroupRow.tsx`) — 본 브랜치 반영 완료
   - `group.photos`는 takenAt 오름차순(groupPhotosByDay 보장)인데 `tripLabel.ts` 주석은 sortIndex 가정 → 지역 노출 순서 오해 소지. 집합 정확성 문제 아님(표시 순서만).
   - 조치: DayGroupRow 호출부에 의도 정렬(takenAt=촬영순) 명시 주석 추가로 해소. `tripLabel.ts`(재사용 무변경 자산)는 미수정 — 추후 주석 일반화는 선택.
+
+---
+
+# 사진 삭제(경로지도 핀 + 여행목록 다중선택) 후속 이슈
+
+> 작성일: 2026-06-12 / 출처: feat/photo-delete 멀티에이전트 리뷰(Code Reviewer + Security Engineer)
+> 양쪽 High 0건. Code Reviewer Medium 2건 / Security Medium 0건.
+> M2(삭제 실패 무음 무시 — 비가역 작업)는 본 브랜치 반영 완료(PhotoSelectScreen·PhotoMapView 에러 상태 + role="alert" 노출, 선택 유지 재시도). M1 + 잔여 Low는 아래.
+
+## Medium → 의도된 스코프(조치 보류)
+
+- [ ] **삭제 시 trips/tripRecords 메타데이터 stale** (M1, `src/data/deleteOps.ts`) — 플랜 Risk #2 명시 트레이드오프
+  - 사진 삭제 시 sigungu RegionStatus만 재계산하고 `trips`(bbox/대표지역)는 미터치 → 여행 bbox/대표지역이 일시적으로 삭제 전 값일 수 있음.
+  - 현재 trips는 UI 비노출 + 다음 스캔 reconcile에서 정합화되므로 실사용 영향 없음(의도된 트레이드오프).
+  - 트립 메타가 UI 노출되면: deleteOps에서 생존 사진으로 trip bbox/대표지역도 재계산하거나, 삭제를 트리거로 부분 reconcile 호출 검토.
+
+## Low (선택적)
+
+- [ ] **PhotoSelectScreen 썸네일 점진 렌더** (`src/hooks/useThumbUrls.ts`)
+  - `useThumbUrls`는 모든 id 썸네일을 모은 뒤 한 번에 `setUrls` → 사진이 많으면 그리드가 일괄 늦게 채워짐(빈 셀 후 한꺼번에 표시).
+  - 개선: 루프 내에서 점진적으로 `setUrls((m) => ({ ...m, [id]: url }))` 갱신하면 셀이 채워지는 대로 표시. 단 리렌더 증가 트레이드오프 — 규모 커질 때 검토.
+
+- [ ] **ConfirmDialog busy 중 중복 확인 가드 일관화** (`src/components/common/ConfirmDialog.tsx`)
+  - 현재 busy 가드는 호출부(`doDelete` 진입 `if (busy) return` + 트리거 버튼 `disabled`)에만 있고 ConfirmDialog의 "삭제" 버튼 자체는 항상 활성.
+  - 확인 다이얼로그가 열린 짧은 시간 동안 "삭제" 연타 시 `doDelete`는 busy 가드로 중복 실행을 막지만, 시각 피드백(버튼 비활성)은 없음.
+  - 개선: ConfirmDialog에 선택적 `busy`/`disabled` prop 추가해 진행 중 확인 버튼 비활성. (Task 10 브라우저 실측에서 연타 무해 확인.)
+
+- [ ] **테스트 Blob 캐스팅 정리** (`tests/data/repo.delete.test.ts`)
+  - fake-indexeddb structured-clone 제약 회피로 `{} as Blob` 캐스팅 사용(db.ts:20 패턴 차용). 기능 정상이나 타입 안전성 낮음.
+  - 개선: 실제 `new Blob()`로 교체 가능한지(fake-indexeddb 버전 의존) 확인 후 정리.
+
+## Security(검증 완료 — 조치 불요)
+
+- 좌표/사진 데이터 외부 전송 없음(삭제는 로컬 Dexie 트랜잭션만). 골든 코어/db/reconcile/storeOps 미변경.
+- `repo.deletePhotos` 5테이블 rw 트랜잭션 원자성 + thumbs bulkDelete로 썸네일 누수 없음. 빈 ids no-op.
+- objectURL 생명주기(useThumbUrls·PhotoMapView): 취소 가드 + cleanup 전량 revoke → 누수 없음.
+- 비가역 삭제는 ConfirmDialog 확인 필수(우발 삭제 방지). userOverride(가고싶음)·sido·trips·home 보존.

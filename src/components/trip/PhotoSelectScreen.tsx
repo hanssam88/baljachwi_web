@@ -22,6 +22,7 @@ export function PhotoSelectScreen({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -34,9 +35,13 @@ export function PhotoSelectScreen({
   const doDelete = async () => {
     if (busy || selected.size === 0) return;
     setBusy(true);
+    setError(null);
     try {
       await repo().deletePhotos([...selected]);
       onDeleted();
+    } catch {
+      // 비가역 작업 실패 → 무음 무시 금지. 선택 유지(재시도 가능) + 에러 노출(M-2).
+      setError('삭제에 실패했습니다. 다시 시도해 주세요.');
     } finally {
       setBusy(false);
       setConfirming(false);
@@ -68,6 +73,7 @@ export function PhotoSelectScreen({
         })}
       </div>
       <div style={footer}>
+        {error && <div style={errorText} role="alert">{error}</div>}
         <button
           type="button"
           style={selected.size > 0 ? delBtn : delBtnOff}
@@ -109,6 +115,7 @@ const check: CSSProperties = {
   background: 'var(--accent)', color: '#fff', fontSize: 13, lineHeight: '22px', textAlign: 'center',
 };
 const footer: CSSProperties = { padding: 'var(--space-3)', borderTop: '1px solid var(--separator)', background: 'var(--surface)' };
+const errorText: CSSProperties = { margin: '0 0 var(--space-2)', fontSize: 13, color: '#C2453A', textAlign: 'center' };
 const delBtn: CSSProperties = {
   width: '100%', padding: '12px 0', border: 'none', borderRadius: 'var(--radius-md)',
   background: '#C2453A', color: '#fff', fontSize: 16, fontWeight: 600, cursor: 'pointer',
