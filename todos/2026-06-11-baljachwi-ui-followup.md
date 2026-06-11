@@ -48,3 +48,20 @@
 ## 의도된 동작(조치 불요)
 
 - **경로지도(전체-핀) 탭의 크로스-트립 같은-날 연결**: `RouteMapScreen`은 `useAllPhotos()`(전체) → 핀 클릭 시 같은 `localDay`의 모든 사진을 연결(서로 다른 트립이라도). 사용자 명시 요청("경로지도=전체 핀 지도 + 그날 저장된 핀들을 이어주기")과 일치. `localDay`는 epoch 기준 절대 일수라 연도별 같은 월/일은 충돌하지 않음(다른 정수). per-trip `TripMapView`는 입력이 이미 단일 트립으로 스코프됨.
+
+---
+
+# 여행 목록 → 날짜별 일자 카드 전환 후속(dead-code)
+
+> 작성일: 2026-06-11 / 출처: feat/triplist-date-grouping (여행 목록을 세그먼터 trip → 현지 날짜별 카드로 완전 교체)
+> 사용자 명시 요청("동일 날짜로 묶어줘, 구글 타임라인 참고")으로 세그먼터 기반 여행 목록 UI를 제거. 데이터/코어(tripSegmenter·tripRecords)는 보존.
+
+## Dead-code (삭제 금지 — 사용자 확인 후 별도 PR)
+
+교체 후 아래 자산이 **프로덕션 미사용**이 됨(테스트 파일/자기 정의 외 import 없음, `tsc`/`vitest`는 실패하지 않음). 세그먼터 trip 목록 복원/병행 가능성이 있어 **삭제하지 않고** 보존:
+
+- [ ] `src/components/trip/TripMapView.tsx` — per-trip 핀 지도. TripListScreen이 유일 소비처였음(이제 미사용). 테스트 `tests/components/trip.test.tsx`만 참조.
+- [ ] `src/components/trip/TripRow.tsx` — 세그먼터 여행 행. TripListScreen이 유일 소비처였음(이제 미사용). DayGroupRow가 동형 스타일을 복제했으므로 양립 가능.
+- [ ] `src/hooks/useTrips.ts` `useTripsByRecent()` — 프로덕션 소비처 0(TripListScreen 제거 후).
+- [ ] `src/hooks/useTrips.ts` `usePhotosForTrip()` — 위 TripMapView/TripRow(둘 다 dead)에서만 사용 → 연쇄 dead.
+  - 정리 시 순서: TripMapView/TripRow 제거 → usePhotosForTrip/useTripsByRecent 제거 → 관련 테스트(`trip.test.tsx`) 정리. 한 번에 PR로.

@@ -1,51 +1,50 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import type { PhotoRef, TripRecord } from '@/data/models';
+import userEvent from '@testing-library/user-event';
+import type { PhotoRef } from '@/data/models';
+import type { DayGroup } from '@/lib/dayGroups';
 
-// 무거운 의존(dynamic import maplibre) 차단 + 회귀 가드용 스텁.
-// TripListScreen은 더 이상 PhotoMapView를 import하지 않는다(0-trips 지도 폴백 제거).
-// 만약 누군가 폴백 지도를 재도입하면 이 스텁이 'photo-map'을 렌더 → 아래 음성 단언이 깨져 회귀를 잡는다.
+// 무거운 dynamic import(maplibre) 차단 + 클릭 후 진입 검증용 스텁.
 vi.mock('@/components/trip/PhotoMapView', () => ({
-  PhotoMapView: ({ photos }: { photos: PhotoRef[] }) => (
-    <div data-testid="photo-map">photos:{photos.length}</div>
+  PhotoMapView: ({ photos, title }: { photos: PhotoRef[]; title?: string }) => (
+    <div data-testid="photo-map">map:{title}:{photos.length}</div>
   ),
 }));
 
-const hooks = vi.hoisted(() => ({
-  trips: undefined as TripRecord[] | undefined,
-  photos: undefined as PhotoRef[] | undefined,
-}));
+const hooks = vi.hoisted(() => ({ groups: undefined as DayGroup[] | undefined }));
 vi.mock('@/hooks/useTrips', () => ({
-  useTripsByRecent: () => hooks.trips,
-  useRegionNames: () => ({}),
-  useAllPhotos: () => hooks.photos,
+  useDayGroups: () => hooks.groups,
+  useRegionNames: () => ({ R1: '부산 연제구' }),
 }));
 
-function photo(id: string): PhotoRef {
-  return { localIdentifier: id, lat: 33.5, lon: 126.5, takenAt: 0, localTZoffsetSeconds: 0,
-    regionCode: null, tripID: null, sortIndex: 0, userOverride: false };
+const KST = 32400;
+function p(id: string): PhotoRef {
+  return { localIdentifier: id, lat: 33.5, lon: 126.5, takenAt: 1704078000, localTZoffsetSeconds: KST,
+    regionCode: 'R1', tripID: null, sortIndex: 0, userOverride: false };
 }
 
 import { TripListScreen } from '@/components/trip/TripListScreen';
 
-describe('TripListScreen 빈 상태', () => {
-  beforeEach(() => { hooks.trips = undefined; hooks.photos = undefined; });
+describe('TripListScreen 날짜별', () => {
+  beforeEach(() => { hooks.groups = undefined; });
 
-  it('여행 0개 + loose 사진 있음 → 안내 문구(지도 폴백 없음, 경로지도로 안내)', async () => {
-    hooks.trips = [];
-    hooks.photos = [photo('a')];
+  it('로딩 중(undefined) → "불러오는 중…"', () => {
+    hooks.groups = undefined;
     render(<TripListScreen />);
-    // 경로지도 탭이 전체-핀 지도를 담당하므로, 여행목록은 지도를 중복 표시하지 않고 안내만 한다.
-    expect(await screen.findByText(/여행으로 묶인 사진이 없/)).toBeInTheDocument();
-    expect(screen.getByText(/경로지도/)).toBeInTheDocument();
-    expect(screen.queryByTestId('photo-map')).not.toBeInTheDocument();
+    expect(screen.getByText('불러오는 중…')).toBeInTheDocument();
   });
-
-  it('여행 0개 + 사진 0장 → "아직 여행이 없습니다"', () => {
-    hooks.trips = [];
-    hooks.photos = [];
+  it('사진 0장(그룹 0개) → "아직 여행이 없습니다"', () => {
+    hooks.groups = [];
     render(<TripListScreen />);
     expect(screen.getByText('아직 여행이 없습니다')).toBeInTheDocument();
     expect(screen.queryByTestId('photo-map')).not.toBeInTheDocument();
+  });
+  it('일자 카드 렌더 + 클릭 시 그날 핀 지도(PhotoMapView) 진입', async () => {
+    hooks.groups = [{ localDay: 1, photos: [p('a'), p('b')] }];
+    const user = userEvent.setup();
+    render(<TripListScreen />);
+    expect(screen.getByText('1970. 1. 2. (금)')).toBeInTheDocument();
+    await user.click(screen.getByRole('button'));
+    expect(screen.getByTestId('photo-map')).toHaveTextContent('map:1970. 1. 2. (금):2');
   });
 });
