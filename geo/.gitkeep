@@ -1,0 +1,3 @@
+# GeoJSON/path 아티팩트 보관 폴더.
+# 채우기: BALJACHWI_IOS_ROOT=../baljachwi npm run copy-geo && npm run gen-choropleth
+# (Phase 1/3에서 실제 데이터 투입)
