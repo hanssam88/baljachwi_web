@@ -13,6 +13,7 @@ import { photosBBox } from '@/lib/photosBBox';
 import { dayConnectorCoords, localDayOf } from '@/lib/sameDayConnector';
 import { hasTileConsent, setTileConsent } from '@/components/map/tileConsent';
 import { TileNotice } from '@/components/map/TileNotice';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
 const MIN_SPAN = 0.01; // ≈1km — 단일/근접 사진 과도 줌 방지(iOS minSpan)
@@ -22,12 +23,17 @@ export interface PhotoMapViewProps {
   /** 상단 바 back 버튼. 없으면 바 미표시(빈 상태용). */
   onBack?: () => void;
   title?: string;
+  /** 핀 삭제 성공 후 호출(스냅샷 뷰는 닫아 라이브 복귀). 미전달 시 liveQuery 자동 갱신에 의존. */
+  onAfterDelete?: () => void;
 }
 
-export function PhotoMapView({ photos, onBack, title }: PhotoMapViewProps) {
+export function PhotoMapView({ photos, onBack, title, onAfterDelete }: PhotoMapViewProps) {
   const mapEl = useRef<HTMLDivElement>(null);
   const [needNotice, setNeedNotice] = useState(false);
   const [ack, setAck] = useState(false);
+  const [selected, setSelected] = useState<PhotoRef | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   // liveQuery는 매 발화마다 새 배열 참조를 emit → 사진 '집합'이 실제로 바뀔 때만 effect 재생성.
   const photosKey = useMemo(() => photos.map((p) => p.localIdentifier).join(','), [photos]);
@@ -36,6 +42,12 @@ export function PhotoMapView({ photos, onBack, title }: PhotoMapViewProps) {
     if (hasTileConsent()) setAck(true);
     else setNeedNotice(true);
   }, []);
+
+  // 사진 집합이 바뀌면(삭제·탭 전환 등) 선택/확인 상태 리셋.
+  useEffect(() => {
+    setSelected(null);
+    setConfirming(false);
+  }, [photosKey]);
 
   useEffect(() => {
     if (!ack || !mapEl.current || photos.length === 0) return;
@@ -99,7 +111,7 @@ export function PhotoMapView({ photos, onBack, title }: PhotoMapViewProps) {
             src.setData(empty);
           }
         };
-        map.on('click', () => setConnector(null)); // 캔버스(빈 영역) 클릭 → 해제
+        map.on('click', () => { setConnector(null); setSelected(null); }); // 캔버스(빈 영역) 클릭 → 해제
 
         // 핀(썸네일 blob → objectURL Marker). 없으면 점.
         const r = repo();
@@ -117,7 +129,7 @@ export function PhotoMapView({ photos, onBack, title }: PhotoMapViewProps) {
               elm.style.backgroundImage = `url(${url})`;
             }
             elm.style.cursor = 'pointer';
-            elm.addEventListener('click', (ev) => { ev.stopPropagation(); setConnector(p); });
+            elm.addEventListener('click', (ev) => { ev.stopPropagation(); setConnector(p); setSelected(p); });
             new maplibre.Marker({ element: elm }).setLngLat([p.lon, p.lat]).addTo(map);
           } catch {
             // 개별 핀 실패(이상 좌표 등)는 건너뜀.
@@ -152,6 +164,19 @@ export function PhotoMapView({ photos, onBack, title }: PhotoMapViewProps) {
     setAck(true);
   };
 
+  const doDelete = async () => {
+    if (!selected || busy) return;
+    setBusy(true);
+    try {
+      await repo().deletePhotos([selected.localIdentifier]);
+      setSelected(null);
+      setConfirming(false);
+      onAfterDelete?.(); // 스냅샷 뷰(여행목록)는 닫힘. 라이브 뷰(경로지도)는 liveQuery가 갱신.
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div style={screen}>
       {onBack && (
@@ -166,6 +191,20 @@ export function PhotoMapView({ photos, onBack, title }: PhotoMapViewProps) {
         <div style={mapWrap}>
           <div ref={mapEl} style={mapBox} />
           {needNotice && <TileNotice onAccept={acceptNotice} />}
+          {selected && !confirming && (
+            <div style={actionBar}>
+              {/* disabled={busy}: 삭제 진행 중 stale 핀 재클릭 방지(H-1). 빠른 재클릭은 Task 10 실측 확인. */}
+              <button type="button" style={delPinBtn} disabled={busy} onClick={() => setConfirming(true)}>이 사진 삭제</button>
+              <button type="button" style={cancelPinBtn} onClick={() => setSelected(null)}>취소</button>
+            </div>
+          )}
+          {confirming && (
+            <ConfirmDialog
+              message="이 사진을 삭제할까요? 되돌릴 수 없습니다."
+              onConfirm={doDelete}
+              onCancel={() => setConfirming(false)}
+            />
+          )}
         </div>
       )}
     </div>
@@ -186,4 +225,17 @@ const mapWrap: CSSProperties = { position: 'relative', flex: 1, minHeight: 0 };
 const mapBox: CSSProperties = { position: 'absolute', inset: 0 };
 const empty: CSSProperties = {
   flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--label2)',
+};
+// actionBar(bottom:0)는 selected일 때만 잠깐 노출 — maplibre attribution(우하단) 상시 가림 아님(M-1, Task 10 육안 확인).
+const actionBar: CSSProperties = {
+  position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', gap: 'var(--space-3)',
+  padding: 'var(--space-3)', background: 'var(--surface)', borderTop: '1px solid var(--separator)', zIndex: 10,
+};
+const delPinBtn: CSSProperties = {
+  flex: 1, padding: '12px 0', border: 'none', borderRadius: 'var(--radius-md)',
+  background: '#C2453A', color: '#fff', fontSize: 16, fontWeight: 600, cursor: 'pointer',
+};
+const cancelPinBtn: CSSProperties = {
+  flex: 1, padding: '12px 0', border: '1px solid var(--separator)', borderRadius: 'var(--radius-md)',
+  background: 'var(--surface)', color: 'var(--label)', fontSize: 16, fontWeight: 600, cursor: 'pointer',
 };
