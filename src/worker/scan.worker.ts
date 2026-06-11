@@ -7,6 +7,9 @@
 import { scanPhotos } from '@/core/photoScan';
 import { GeoDataStore, type RegionCodeEntry } from '@/core/geoDataStore';
 import { RegionMatcher } from '@/core/regionMatcher';
+import { JejuRefiningMatcher } from '@/core/jejuRefiningMatcher';
+import { polygonsBySgg } from '@/core/geojsonDecode';
+import type { JejuDong } from '@/core/jejuRefiner';
 import { buildScanPipeline } from '@/core/scanPipeline';
 import type { ScanRequest, ScanResponse } from '@/worker/protocol';
 
@@ -18,17 +21,29 @@ let matcherPromise: Promise<RegionMatcher> | null = null;
 async function getMatcher(): Promise<RegionMatcher> {
   if (matcherPromise === null) {
     matcherPromise = (async () => {
-      const [entriesRes, geoRes] = await Promise.all([
+      const [entriesRes, geoRes, jejuRes] = await Promise.all([
         fetch('/geo/region_codes.json'),
         fetch('/geo/sigungu.geojson'),
+        fetch('/geo/jeju-emd.geojson'),
       ]);
       if (!entriesRes.ok || !geoRes.ok) {
         throw new Error('geo 데이터 로드 실패');
       }
+      // 제주 동 asset도 실패 시 throw(silent degrade 금지). 누락 시 50110/50130이 저장되는데
+      // 표시 geojson엔 두 시 피처가 없어 색 누락 + 분모 296 왜곡 → 조용히 넘기면 안 됨.
+      if (!jejuRes.ok) {
+        throw new Error(`jeju-emd.geojson load failed: ${jejuRes.status}`);
+      }
       const entries = (await entriesRes.json()) as RegionCodeEntry[];
       const geojson = await geoRes.json();
-      return new RegionMatcher(new GeoDataStore(entries, geojson));
+      const jejuJson = await jejuRes.json();
+      const store = new GeoDataStore(entries, geojson);
+      const map = polygonsBySgg(jejuJson); // Map<adm_cd2, MultiPolygon>
+      const dongs: JejuDong[] = [...map.entries()].map(([code, mp]) => ({ code, mp }));
+      return new JejuRefiningMatcher(store, dongs);
     })();
+    // 실패 시 거부 promise를 영구 캐시하지 않도록 메모 리셋(다음 호출서 재시도). 반환은 원본 promise라 거부는 표면화.
+    matcherPromise.catch(() => { matcherPromise = null; });
   }
   return matcherPromise;
 }

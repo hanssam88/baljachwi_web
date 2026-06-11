@@ -5,7 +5,7 @@ import { levelLayerConfig, sanitizeColor, buildFillColorExpression } from '@/lib
 describe('levelLayerConfig', () => {
   it('시군구 설정', () => {
     expect(levelLayerConfig('sigungu')).toEqual({
-      url: '/geo/sigungu_display.geojson', codeProp: 'sgg', nameProp: 'sggnm', total: 255,
+      url: '/geo/sigungu_display.geojson', codeProp: 'sgg', nameProp: 'sggnm', total: 296,
     });
   });
   it('시도 설정', () => {

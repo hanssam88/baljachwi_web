@@ -13,7 +13,7 @@ export interface LevelLayerConfig {
 /** 레벨별 표시용 geojson URL·코드/이름 속성·총 지역수. (시도는 sido_display, 시군구는 sigungu_display) */
 export function levelLayerConfig(level: Level): LevelLayerConfig {
   return level === 'sigungu'
-    ? { url: '/geo/sigungu_display.geojson', codeProp: 'sgg', nameProp: 'sggnm', total: 255 }
+    ? { url: '/geo/sigungu_display.geojson', codeProp: 'sgg', nameProp: 'sggnm', total: 296 } // 255 - 제주시/서귀포시 2 + 제주 읍면동 43
     : { url: '/geo/sido_display.geojson', codeProp: 'sido', nameProp: 'sidonm', total: 17 };
 }
 

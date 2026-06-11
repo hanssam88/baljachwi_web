@@ -40,10 +40,13 @@ describe('geoDataStore', () => {
     expect(() => new GeoDataStore(regionCodes, sigunguGeoJSON)).not.toThrow();
   });
 
-  it('entryCounts — 272 = 255 sigungu + 17 sido', () => {
-    expect(store.entries.length).toBe(272);
+  // 제주 읍면동 세분화(copy-geo 스플라이스) 후 region_codes 엔트리 = 272 + 43 동(level:'emd').
+  // 50110/50130(시군구)은 base 매처용으로 유지되므로 sigungu 수는 255 불변.
+  it('entryCounts — 315 = 255 sigungu + 17 sido + 43 제주 emd', () => {
+    expect(store.entries.length).toBe(315);
     expect(store.entries.filter((e) => e.level === 'sigungu').length).toBe(255);
     expect(store.entries.filter((e) => e.level === 'sido').length).toBe(17);
+    expect(store.entries.filter((e) => e.level === 'emd').length).toBe(43);
   });
 
   it('sigunguPolygonCount — sigungu 엔트리 255개 전부 디코드됨', () => {
@@ -124,9 +127,15 @@ describe('geoDataStore', () => {
 // ──────────────────────────────────────────────────────────────────
 
 describe('displayGeoStore', () => {
-  it('decodesAllSigungu — sigungu_display = 255', () => {
+  // 제주 세분화 후 표시 geojson = 255 - 제주시·서귀포시 2 + 제주 읍면동 43 = 296.
+  it('decodesAllSigungu — sigungu_display = 296 (제주 2시 → 43동 스플라이스)', () => {
     const store = new DisplayGeoStore(sigunguDisplayGeoJSON);
-    expect(store.polygons.size).toBe(255);
+    expect(store.polygons.size).toBe(296);
+    // 제주 2시 피처는 동으로 대체되어 표시 geojson에 없음.
+    expect(store.polygons.get('50110')).toBeUndefined();
+    expect(store.polygons.get('50130')).toBeUndefined();
+    // 제주 동(한림읍 5011025000)은 표시됨.
+    expect(store.polygons.get('5011025000')).toBeDefined();
   });
 
   it('knownRegionPolygonsPresentAndNonEmpty — 서울 중구(11140)·부산 동구(26170)', () => {
