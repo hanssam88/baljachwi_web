@@ -42,6 +42,9 @@
 - [ ] **단일-사진 날짜 핀도 cursor:pointer + 클릭 리스너 부착** (`src/components/trip/PhotoMapView.tsx`)
   - 같은 날 1장뿐인 핀 클릭 시 연결선 없음(빈 결과). 무해한 UX, 보안 영향 없음. 필요 시 ≥2장 날짜만 pointer 부여.
 
+- [ ] **빈 상태 카피 통일** (`TripListScreen.tsx` ↔ `RouteMapScreen.tsx`) — `fix/triplist-empty-no-map-duplication` 리뷰 Low
+  - 여행목록 0개+사진 0장 "아직 여행이 없습니다", 0개+사진 N장 "아직 여행으로 묶인 사진이 없어요" vs 경로지도 0장 "아직 표시할 사진이 없습니다" — 탭마다 '사진 없음' 표현 상이. 기능 결함 아님. 카피 토큰화로 통일 검토.
+
 ## 의도된 동작(조치 불요)
 
 - **경로지도(전체-핀) 탭의 크로스-트립 같은-날 연결**: `RouteMapScreen`은 `useAllPhotos()`(전체) → 핀 클릭 시 같은 `localDay`의 모든 사진을 연결(서로 다른 트립이라도). 사용자 명시 요청("경로지도=전체 핀 지도 + 그날 저장된 핀들을 이어주기")과 일치. `localDay`는 epoch 기준 절대 일수라 연도별 같은 월/일은 충돌하지 않음(다른 정수). per-trip `TripMapView`는 입력이 이미 단일 트립으로 스코프됨.
