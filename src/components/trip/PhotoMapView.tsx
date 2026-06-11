@@ -1,7 +1,7 @@
 'use client';
 
 // src/components/trip/PhotoMapView.tsx — 사진 위치 지도(MapLibre, 지연 로드).
-// 핀(썸네일) + (옵션)경로선 + 사진 bbox 카메라. 여행 경로지도와 빈 상태 사진맵이 공유.
+// 핀(썸네일) + 핀 클릭 시 같은-날 연결선 + 사진 bbox 카메라. 여행 경로지도와 빈 상태 사진맵이 공유.
 // maplibre는 이 컴포넌트에서만 동적 import → 지역탭은 100% 오프라인 유지.
 // 기본맵 타일이 유일한 외부 호출(무키, 프라이버시 고지).
 
@@ -10,6 +10,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import type { PhotoRef } from '@/data/models';
 import { repo } from '@/data/repo';
 import { photosBBox } from '@/lib/photosBBox';
+import { dayConnectorCoords, localDayOf } from '@/lib/sameDayConnector';
 import { hasTileConsent, setTileConsent } from '@/components/map/tileConsent';
 import { TileNotice } from '@/components/map/TileNotice';
 
@@ -18,14 +19,12 @@ const MIN_SPAN = 0.01; // ≈1km — 단일/근접 사진 과도 줌 방지(iOS 
 
 export interface PhotoMapViewProps {
   photos: PhotoRef[];
-  /** true면 sortIndex 순 경로선(≥2점). 빈 상태 마커맵은 false. */
-  showPath?: boolean;
   /** 상단 바 back 버튼. 없으면 바 미표시(빈 상태용). */
   onBack?: () => void;
   title?: string;
 }
 
-export function PhotoMapView({ photos, showPath = false, onBack, title }: PhotoMapViewProps) {
+export function PhotoMapView({ photos, onBack, title }: PhotoMapViewProps) {
   const mapEl = useRef<HTMLDivElement>(null);
   const [needNotice, setNeedNotice] = useState(false);
   const [ack, setAck] = useState(false);
@@ -65,24 +64,42 @@ export function PhotoMapView({ photos, showPath = false, onBack, title }: PhotoM
       map.on('load', async () => {
         if (!map || cancelled) return;
 
-        // 경로선(sortIndex 순, ≥2점) — showPath일 때만.
-        if (showPath) {
-          const coords = photos.map((p) => [p.lon, p.lat] as [number, number]);
+        // 같은-날 연결선(핀 클릭 시에만). 빈 소스+라인 레이어 선등록 → setData로 갱신.
+        map.addSource('day-connector', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
+        });
+        const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2E7D5B';
+        map.addLayer({
+          id: 'day-connector-line',
+          type: 'line',
+          source: 'day-connector',
+          paint: { 'line-color': accent, 'line-width': 3 },
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+        });
+
+        // 선택 토글: 다른 날 핀 클릭→그 날 연결, 같은 날 핀 재클릭/빈영역 클릭→해제.
+        let selectedDay: number | null = null;
+        const empty: import('geojson').FeatureCollection = { type: 'FeatureCollection', features: [] };
+        const setConnector = (anchor: PhotoRef | null) => {
+          if (!map || cancelled) return;
+          const src = map.getSource('day-connector') as import('maplibre-gl').GeoJSONSource | undefined;
+          if (!src) return;
+          if (!anchor) { selectedDay = null; src.setData(empty); return; }
+          const day = localDayOf(anchor);
+          if (selectedDay === day) { selectedDay = null; src.setData(empty); return; }
+          selectedDay = day;
+          const coords = dayConnectorCoords(photos, anchor);
           if (coords.length >= 2) {
-            map.addSource('route', {
-              type: 'geojson',
-              data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } },
-            });
-            const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2E7D5B';
-            map.addLayer({
-              id: 'route-line',
-              type: 'line',
-              source: 'route',
-              paint: { 'line-color': accent, 'line-width': 3 },
-              layout: { 'line-cap': 'round', 'line-join': 'round' },
-            });
+            const line: import('geojson').Feature = {
+              type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords },
+            };
+            src.setData(line);
+          } else {
+            src.setData(empty);
           }
-        }
+        };
+        map.on('click', () => setConnector(null)); // 캔버스(빈 영역) 클릭 → 해제
 
         // 핀(썸네일 blob → objectURL Marker). 없으면 점.
         const r = repo();
@@ -99,6 +116,8 @@ export function PhotoMapView({ photos, showPath = false, onBack, title }: PhotoM
               urls.push(url);
               elm.style.backgroundImage = `url(${url})`;
             }
+            elm.style.cursor = 'pointer';
+            elm.addEventListener('click', (ev) => { ev.stopPropagation(); setConnector(p); });
             new maplibre.Marker({ element: elm }).setLngLat([p.lon, p.lat]).addTo(map);
           } catch {
             // 개별 핀 실패(이상 좌표 등)는 건너뜀.
@@ -123,9 +142,9 @@ export function PhotoMapView({ photos, showPath = false, onBack, title }: PhotoM
       urls.forEach((u) => URL.revokeObjectURL(u));
       map?.remove();
     };
-    // photosKey·showPath로 좁혀 liveQuery 재발화마다 지도가 재생성되지 않게 한다.
+    // photosKey로 좁혀 liveQuery 재발화마다 지도가 재생성되지 않게 한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ack, photosKey, showPath]);
+  }, [ack, photosKey]);
 
   const acceptNotice = () => {
     setTileConsent();

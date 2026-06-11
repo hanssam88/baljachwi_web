@@ -36,7 +36,7 @@ export function TripListScreen() {
   if (trips.length === 0) {
     // 여행 0개라도 위치 있는 사진(여행 분할 trivial 제외)이 1장이라도 있으면 마커맵.
     if (allPhotos === undefined) return <div style={center}>불러오는 중…</div>;
-    if (allPhotos.length > 0) return <PhotoMapView photos={allPhotos} showPath={false} />;
+    if (allPhotos.length > 0) return <PhotoMapView photos={allPhotos} />;
     return <div style={center}>아직 여행이 없습니다</div>;
   }
 
