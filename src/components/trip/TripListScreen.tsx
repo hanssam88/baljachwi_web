@@ -1,6 +1,6 @@
 'use client';
 
-// src/components/trip/TripListScreen.tsx — 경로지도 탭. 여행 목록(최신순) ↔ 경로지도 전환.
+// src/components/trip/TripListScreen.tsx — 여행 목록 탭. 여행 목록(최신순) ↔ 그 여행 핀 지도 전환.
 
 import { useState, type CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
@@ -8,7 +8,7 @@ import type { TripRecord } from '@/data/models';
 import { useTripsByRecent, useRegionNames, useAllPhotos } from '@/hooks/useTrips';
 import { TripRow } from '@/components/trip/TripRow';
 
-// maplibre는 경로지도 진입 시에만 로드(지역탭은 100% 오프라인). CSS·라이브러리 모두 이 시점에.
+// maplibre는 여행 핀 지도 진입 시에만 로드(지역탭은 100% 오프라인). CSS·라이브러리 모두 이 시점에.
 const TripMapView = dynamic(
   () => import('@/components/trip/TripMapView').then((m) => m.TripMapView),
   { ssr: false, loading: () => <div style={center}>지도 불러오는 중…</div> },

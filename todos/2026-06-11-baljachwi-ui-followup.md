@@ -20,3 +20,28 @@
 - 타일 동의(ack) 게이트: 빈 상태 마커맵(F2)도 동일 PhotoMapView 사용 → 동의 우회 경로 없음.
 - objectURL 생명주기: createObjectURL 직전 cancelled 가드 2회 + cleanup 전량 revoke → 누수 없음.
 - 좌표 외부 비전송, applyScan(ADD) 데이터 무결성(prune·home 미터치), 코어/의존성 미변경.
+
+---
+
+# 여행 목록 탭 + 같은-날 핀 연결선 후속 이슈
+
+> 작성일: 2026-06-11 / 출처: feat/trip-list-tab-day-connector 멀티에이전트 리뷰(Code Reviewer + Security Engineer)
+> 양쪽 High 0건 / Medium 0건. L1(stale 주석)은 본 브랜치에서 반영 완료. 아래는 잔여 Low.
+
+## Low (선택적)
+
+- [ ] **EXIF 좌표 NaN/Infinity 방어** (`src/core/photoScan.ts` 좌표 필터, `src/lib/exif.ts:60-61`)
+  - 현재 필터는 `=== null`과 `(0,0)` 원점만 제외 → `NaN`/`Infinity`가 그대로 PhotoRef에 저장될 수 있음.
+  - 새 연결선이 두 번째 소비자(LineString 좌표)로 추가됨. MapLibre는 대체로 해당 세그먼트만 깨뜨려 로컬 영향만 있음(severity Low).
+  - 권장: `Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat)<=90 && Math.abs(lon)<=180` 필터 추가. **단 코어(photoScan) 변경이라 골든 영향 검토 후 별도 PR.**
+
+- [ ] **`--accent` 라인 색상 런타임 갱신 안 됨** (`src/components/trip/PhotoMapView.tsx`)
+  - `getComputedStyle(...).--accent`를 `map.on('load')` 시점 1회만 읽음 → 런타임 테마 전환 시(맵 미리마운트) 색상 stale.
+  - 기존 route-line도 동일 패턴(본 변경이 도입한 것 아님). 다크모드 작업 시 함께 처리.
+
+- [ ] **단일-사진 날짜 핀도 cursor:pointer + 클릭 리스너 부착** (`src/components/trip/PhotoMapView.tsx`)
+  - 같은 날 1장뿐인 핀 클릭 시 연결선 없음(빈 결과). 무해한 UX, 보안 영향 없음. 필요 시 ≥2장 날짜만 pointer 부여.
+
+## 의도된 동작(조치 불요)
+
+- **경로지도(전체-핀) 탭의 크로스-트립 같은-날 연결**: `RouteMapScreen`은 `useAllPhotos()`(전체) → 핀 클릭 시 같은 `localDay`의 모든 사진을 연결(서로 다른 트립이라도). 사용자 명시 요청("경로지도=전체 핀 지도 + 그날 저장된 핀들을 이어주기")과 일치. `localDay`는 epoch 기준 절대 일수라 연도별 같은 월/일은 충돌하지 않음(다른 정수). per-trip `TripMapView`는 입력이 이미 단일 트립으로 스코프됨.
