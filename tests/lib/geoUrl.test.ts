@@ -19,4 +19,8 @@ describe('geoUrl', () => {
     process.env.NEXT_PUBLIC_BASE_PATH = '';
     expect(geoUrl('/geo/region_codes.json')).toBe('/geo/region_codes.json');
   });
+  it('끝 슬래시가 있어도 더블슬래시 없이 정규화 (리뷰 반영)', () => {
+    process.env.NEXT_PUBLIC_BASE_PATH = '/baljachwi_web/';
+    expect(geoUrl('/geo/sigungu.geojson')).toBe('/baljachwi_web/geo/sigungu.geojson');
+  });
 });
