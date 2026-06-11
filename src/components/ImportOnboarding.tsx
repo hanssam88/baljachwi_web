@@ -3,23 +3,35 @@
 // src/components/ImportOnboarding.tsx — 사진 가져오기 CTA + 드롭존 + 진행률.
 // iOS의 무음 자동 스캔을 웹의 명시적 가져오기로 대체. 업로드 없음(전부 기기 내).
 
-import { useRef, useState, type CSSProperties, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react';
 import { TYPE } from '@/lib/tokens';
 import { pickImages, filesFromDrop } from '@/lib/filePick';
 import { useScan } from '@/hooks/useScan';
 
-export function ImportOnboarding() {
+export function ImportOnboarding({
+  mode = 'reconcile',
+  onImported,
+}: { mode?: 'reconcile' | 'apply'; onImported?: () => void } = {}) {
   const { state, importFiles } = useScan();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
   const busy = state.phase === 'reading-exif' || state.phase === 'scanning' || state.phase === 'saving';
 
+  // 가져오기 완료 시 1회 콜백(재업로드 뷰 닫기용). ref 가드로 재발화 방지.
+  const firedRef = useRef(false);
+  useEffect(() => {
+    if (state.phase === 'done' && onImported && !firedRef.current) {
+      firedRef.current = true;
+      onImported();
+    }
+  }, [state.phase, onImported]);
+
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const files = filesFromDrop(e.dataTransfer);
-    if (files.length) void importFiles(files);
+    if (files.length) void importFiles(files, mode);
   };
 
   return (
@@ -52,7 +64,7 @@ export function ImportOnboarding() {
           hidden
           onChange={(e) => {
             const files = pickImages(e.target.files);
-            if (files.length) void importFiles(files);
+            if (files.length) void importFiles(files, mode);
             e.target.value = '';
           }}
         />

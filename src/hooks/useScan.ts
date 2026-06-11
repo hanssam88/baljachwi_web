@@ -54,7 +54,7 @@ export function useScan() {
   }, []);
 
   const importFiles = useCallback(
-    async (files: File[]): Promise<void> => {
+    async (files: File[], mode: 'reconcile' | 'apply' = 'reconcile'): Promise<void> => {
       if (files.length === 0) return;
       if (runningRef.current) return; // 진행 중이면 무시(중복 호출 가드)
       runningRef.current = true;
@@ -113,10 +113,12 @@ export function useScan() {
       }
       if (result.type !== 'done') return;
 
-      // 3) Dexie 반영(단일 writer).
+      // 3) Dexie 반영(단일 writer). 최초 온보딩=reconcile(home 동기화·prune),
+      //    재업로드='apply'(upsert만, 기존에 추가 — prune·home 미터치).
       setState({ phase: 'saving', progress: 0, label: '저장 중…', error: null });
       const r = repo();
-      await r.reconcileScan(result.result);
+      if (mode === 'apply') await r.applyScan(result.result);
+      else await r.reconcileScan(result.result);
 
       // 4) 썸네일 생성·저장(실패해도 본 데이터 무관). localIdentifier↔File 매핑.
       const byId = new Map<string, File>();
