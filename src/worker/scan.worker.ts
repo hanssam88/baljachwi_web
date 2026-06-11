@@ -9,6 +9,7 @@ import { GeoDataStore, type RegionCodeEntry } from '@/core/geoDataStore';
 import { RegionMatcher } from '@/core/regionMatcher';
 import { JejuRefiningMatcher } from '@/core/jejuRefiningMatcher';
 import { polygonsBySgg } from '@/core/geojsonDecode';
+import { geoUrl } from '@/lib/geoUrl';
 import type { JejuDong } from '@/core/jejuRefiner';
 import { buildScanPipeline } from '@/core/scanPipeline';
 import type { ScanRequest, ScanResponse } from '@/worker/protocol';
@@ -22,9 +23,9 @@ async function getMatcher(): Promise<RegionMatcher> {
   if (matcherPromise === null) {
     matcherPromise = (async () => {
       const [entriesRes, geoRes, jejuRes] = await Promise.all([
-        fetch('/geo/region_codes.json'),
-        fetch('/geo/sigungu.geojson'),
-        fetch('/geo/jeju-emd.geojson'),
+        fetch(geoUrl('/geo/region_codes.json')),
+        fetch(geoUrl('/geo/sigungu.geojson')),
+        fetch(geoUrl('/geo/jeju-emd.geojson')),
       ]);
       if (!entriesRes.ok || !geoRes.ok) {
         throw new Error('geo 데이터 로드 실패');

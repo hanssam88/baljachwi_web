@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useLive } from '@/hooks/useLive';
 import { getDB } from '@/data/db';
 import { RegionNames } from '@/core/regionNames';
+import { geoUrl } from '@/lib/geoUrl';
 import type { RegionCodeEntry } from '@/core/geoDataStore';
 import type { TripRecord, PhotoRef } from '@/data/models';
 
@@ -24,7 +25,7 @@ export function useRegionNames(): Record<string, string> {
   const [names, setNames] = useState<Record<string, string>>({});
   useEffect(() => {
     let alive = true;
-    fetch('/geo/region_codes.json')
+    fetch(geoUrl('/geo/region_codes.json'))
       .then((r) => r.json())
       .then((entries: RegionCodeEntry[]) => {
         if (!alive) return;
