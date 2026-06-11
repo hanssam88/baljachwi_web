@@ -65,3 +65,13 @@
 - [ ] `src/hooks/useTrips.ts` `useTripsByRecent()` — 프로덕션 소비처 0(TripListScreen 제거 후).
 - [ ] `src/hooks/useTrips.ts` `usePhotosForTrip()` — 위 TripMapView/TripRow(둘 다 dead)에서만 사용 → 연쇄 dead.
   - 정리 시 순서: TripMapView/TripRow 제거 → usePhotosForTrip/useTripsByRecent 제거 → 관련 테스트(`trip.test.tsx`) 정리. 한 번에 PR로.
+
+## Low (멀티에이전트 리뷰 — Code Reviewer, High/Medium 0건)
+
+- [ ] **빈 상태 카피를 일자 카드 모델 어휘로 통일** (`TripListScreen.tsx`)
+  - 현재 사진 0장 시 "아직 여행이 없습니다" — 새 모델(일자 카드)에선 '여행' 어휘가 어긋남. 예: "아직 기록된 날이 없습니다".
+  - 날짜 그룹핑 특성상 사진 1장이라도 있으면 항상 카드가 생겨 '사진 있는데 비어보임' 상황은 사라짐(기능 결함 아님). 위 '빈 상태 카피 통일' 항목과 함께 경로지도 탭과 토큰화 통일.
+
+- [x] **`tripDisplayName` 입력 정렬 계약 오해 제거** (`DayGroupRow.tsx`) — 본 브랜치 반영 완료
+  - `group.photos`는 takenAt 오름차순(groupPhotosByDay 보장)인데 `tripLabel.ts` 주석은 sortIndex 가정 → 지역 노출 순서 오해 소지. 집합 정확성 문제 아님(표시 순서만).
+  - 조치: DayGroupRow 호출부에 의도 정렬(takenAt=촬영순) 명시 주석 추가로 해소. `tripLabel.ts`(재사용 무변경 자산)는 미수정 — 추후 주석 일반화는 선택.

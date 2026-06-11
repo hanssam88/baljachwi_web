@@ -16,6 +16,7 @@ export function DayGroupRow({
   onOpen: (group: DayGroup) => void;
 }) {
   // 그날 방문 지역 요약("부산 연제구 · 해운대구 외 N곳", 모두 미상이면 "위치 미상").
+  // group.photos는 takenAt 오름차순(groupPhotosByDay 보장) → 지역 노출 순서 = 촬영 순서(의도).
   const region = tripDisplayName(null, group.photos, names);
   return (
     <button type="button" style={row} onClick={() => onOpen(group)}>
