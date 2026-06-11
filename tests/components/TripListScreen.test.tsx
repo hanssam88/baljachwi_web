@@ -10,6 +10,11 @@ vi.mock('@/components/trip/PhotoMapView', () => ({
     <div data-testid="photo-map">map:{title}:{photos.length}</div>
   ),
 }));
+vi.mock('@/components/trip/PhotoSelectScreen', () => ({
+  PhotoSelectScreen: ({ title, photos }: { title: string; photos: PhotoRef[] }) => (
+    <div data-testid="photo-select">select:{title}:{photos.length}</div>
+  ),
+}));
 
 const hooks = vi.hoisted(() => ({ groups: undefined as DayGroup[] | undefined }));
 vi.mock('@/hooks/useTrips', () => ({
@@ -39,12 +44,19 @@ describe('TripListScreen 날짜별', () => {
     expect(screen.getByText('아직 여행이 없습니다')).toBeInTheDocument();
     expect(screen.queryByTestId('photo-map')).not.toBeInTheDocument();
   });
-  it('일자 카드 렌더 + 클릭 시 그날 핀 지도(PhotoMapView) 진입', async () => {
+  it('카드 본문 클릭 → 그날 핀 지도', async () => {
     hooks.groups = [{ localDay: 1, photos: [p('a'), p('b')] }];
     const user = userEvent.setup();
     render(<TripListScreen />);
     expect(screen.getByText('1970. 1. 2. (금)')).toBeInTheDocument();
-    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByRole('button', { name: /1970\. 1\. 2\./ }));
     expect(screen.getByTestId('photo-map')).toHaveTextContent('map:1970. 1. 2. (금):2');
+  });
+  it('⋯ 클릭 → 사진 선택 화면', async () => {
+    hooks.groups = [{ localDay: 1, photos: [p('a'), p('b')] }];
+    const user = userEvent.setup();
+    render(<TripListScreen />);
+    await user.click(screen.getByRole('button', { name: '더보기' }));
+    expect(screen.getByTestId('photo-select')).toHaveTextContent('select:1970. 1. 2. (금):2');
   });
 });

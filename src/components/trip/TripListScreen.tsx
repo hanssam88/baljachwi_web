@@ -1,10 +1,11 @@
 'use client';
 
-// src/components/trip/TripListScreen.tsx — 여행 목록 탭. 현지 날짜별 일자 카드(최신순) ↔ 그날 핀 지도.
+// src/components/trip/TripListScreen.tsx — 여행 목록 탭. 일자 카드(최신순) ↔ 그날 핀 지도 ↔ 사진 다중삭제.
 import { useState, type CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
 import { useDayGroups, useRegionNames } from '@/hooks/useTrips';
 import { DayGroupRow } from '@/components/trip/DayGroupRow';
+import { PhotoSelectScreen } from '@/components/trip/PhotoSelectScreen';
 import { dayLabel, type DayGroup } from '@/lib/dayGroups';
 
 // maplibre는 그날 지도 진입 시에만 로드(지역탭은 100% 오프라인 유지).
@@ -17,11 +18,27 @@ export function TripListScreen() {
   const groups = useDayGroups();
   const names = useRegionNames();
   const [open, setOpen] = useState<DayGroup | null>(null);
+  const [manage, setManage] = useState<DayGroup | null>(null);
 
   if (open) {
-    // 핀 클릭 시 같은-날 연결선(현행 Req2). 그날 사진은 이미 같은 localDay라 클릭 시 그날만 연결.
+    // open.photos는 스냅샷(라이브 아님) → 핀 삭제 후 onAfterDelete로 닫아 라이브 목록 복귀.
     return (
-      <PhotoMapView photos={open.photos} title={dayLabel(open.localDay)} onBack={() => setOpen(null)} />
+      <PhotoMapView
+        photos={open.photos}
+        title={dayLabel(open.localDay)}
+        onBack={() => setOpen(null)}
+        onAfterDelete={() => setOpen(null)}
+      />
+    );
+  }
+  if (manage) {
+    return (
+      <PhotoSelectScreen
+        title={dayLabel(manage.localDay)}
+        photos={manage.photos}
+        onBack={() => setManage(null)}
+        onDeleted={() => setManage(null)}
+      />
     );
   }
   if (groups === undefined) return <div style={center}>불러오는 중…</div>;
@@ -30,7 +47,7 @@ export function TripListScreen() {
   return (
     <div style={list}>
       {groups.map((g) => (
-        <DayGroupRow key={g.localDay} group={g} names={names} onOpen={setOpen} />
+        <DayGroupRow key={g.localDay} group={g} names={names} onOpen={setOpen} onManage={setManage} />
       ))}
     </div>
   );

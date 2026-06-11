@@ -8,24 +8,30 @@ import { DayGroupRow } from '@/components/trip/DayGroupRow';
 
 const KST = 32400;
 function p(id: string, region: string | null): PhotoRef {
-  return { localIdentifier: id, lat: 33.5, lon: 126.5, takenAt: 1704078000, localTZoffsetSeconds: KST,
-    regionCode: region, tripID: null, sortIndex: 0, userOverride: false };
+  return { localIdentifier: id, lat: 33.5, lon: 126.5, takenAt: 1704078000, localTZoffsetSeconds: KST, regionCode: region, tripID: null, sortIndex: 0, userOverride: false };
 }
 const group: DayGroup = { localDay: 1, photos: [p('a', 'R1'), p('b', 'R2')] };
 const names = { R1: '부산 연제구', R2: '부산 해운대구' };
 
 describe('DayGroupRow', () => {
-  it('날짜 라벨 + 지역 요약 + 사진 수 렌더', () => {
-    render(<DayGroupRow group={group} names={names} onOpen={() => {}} />);
+  it('날짜 + 지역 요약 + 사진 수 렌더', () => {
+    render(<DayGroupRow group={group} names={names} onOpen={() => {}} onManage={() => {}} />);
     expect(screen.getByText('1970. 1. 2. (금)')).toBeInTheDocument();
     expect(screen.getByText(/부산 연제구 · 부산 해운대구/)).toBeInTheDocument();
     expect(screen.getByText(/2장/)).toBeInTheDocument();
   });
-  it('클릭 시 onOpen(group) 호출', async () => {
+  it('본문 클릭 → onOpen(group)', async () => {
     const onOpen = vi.fn();
     const user = userEvent.setup();
-    render(<DayGroupRow group={group} names={names} onOpen={onOpen} />);
-    await user.click(screen.getByRole('button'));
+    render(<DayGroupRow group={group} names={names} onOpen={onOpen} onManage={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /1970\. 1\. 2\./ }));
     expect(onOpen).toHaveBeenCalledWith(group);
+  });
+  it('⋯(더보기) 클릭 → onManage(group)', async () => {
+    const onManage = vi.fn();
+    const user = userEvent.setup();
+    render(<DayGroupRow group={group} names={names} onOpen={() => {}} onManage={onManage} />);
+    await user.click(screen.getByRole('button', { name: '더보기' }));
+    expect(onManage).toHaveBeenCalledWith(group);
   });
 });
