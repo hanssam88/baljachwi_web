@@ -35,6 +35,12 @@ describe('paddedBounds', () => {
     const exp = paddedBounds({ minLat: 30, maxLat: 40, minLon: 120, maxLon: 140 }, MIN, 0.2);
     expect(def).toEqual(exp);
   });
+  it('ratio 명시값(0.5)은 패딩에 실제 반영(기본 0.2와 다른 결과)', () => {
+    const box = { minLat: 30, maxLat: 40, minLon: 120, maxLon: 140 };
+    // ratio 0.5 → lat pad 5, lon pad 10 (기본 0.2의 2.5배)
+    expect(paddedBounds(box, MIN, 0.5)).toEqual([[110, 25], [150, 45]]);
+    expect(paddedBounds(box, MIN, 0.5)).not.toEqual(paddedBounds(box, MIN)); // ratio가 결과를 바꿈
+  });
 });
 
 describe('connectedBounds', () => {

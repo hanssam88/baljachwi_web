@@ -11,12 +11,16 @@ import type { PhotoRef } from '@/data/models';
 import { repo } from '@/data/repo';
 import { photosBBox } from '@/lib/photosBBox';
 import { dayConnectorCoords, localDayOf } from '@/lib/sameDayConnector';
+import { paddedBounds, connectedBounds } from '@/lib/mapCamera';
 import { hasTileConsent, setTileConsent } from '@/components/map/tileConsent';
 import { TileNotice } from '@/components/map/TileNotice';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
 const MIN_SPAN = 0.01; // ≈1km — 단일/근접 사진 과도 줌 방지(iOS minSpan)
+const FOCUS_MAX_ZOOM = 15; // 같은 날 핀 포커스 최대 줌(초기/리셋은 14)
+const FOCUS_BOTTOM_PAD = 96; // 하단 액션바(≈64px) 회피 패딩
+const CAMERA_DURATION = 600; // 포커스/리셋 줌 애니메이션(ms). 초기 마운트 fit은 0 유지.
 
 export interface PhotoMapViewProps {
   photos: PhotoRef[];
@@ -95,13 +99,14 @@ export function PhotoMapView({ photos, onBack, title, onAfterDelete }: PhotoMapV
         // 선택 토글: 다른 날 핀 클릭→그 날 연결, 같은 날 핀 재클릭/빈영역 클릭→해제.
         let selectedDay: number | null = null;
         const empty: import('geojson').FeatureCollection = { type: 'FeatureCollection', features: [] };
-        const setConnector = (anchor: PhotoRef | null) => {
-          if (!map || cancelled) return;
+        // 반환값 = "그 날이 앵커됨"(true, 줌인) vs "해제됨"(false, 줌아웃). 단일 핀(선 없음)도 앵커로 간주.
+        const setConnector = (anchor: PhotoRef | null): boolean => {
+          if (!map || cancelled) return false;
           const src = map.getSource('day-connector') as import('maplibre-gl').GeoJSONSource | undefined;
-          if (!src) return;
-          if (!anchor) { selectedDay = null; src.setData(empty); return; }
+          if (!src) return false;
+          if (!anchor) { selectedDay = null; src.setData(empty); return false; }
           const day = localDayOf(anchor);
-          if (selectedDay === day) { selectedDay = null; src.setData(empty); return; }
+          if (selectedDay === day) { selectedDay = null; src.setData(empty); return false; } // 같은 날 재클릭 → 해제
           selectedDay = day;
           const coords = dayConnectorCoords(photos, anchor);
           if (coords.length >= 2) {
@@ -110,10 +115,28 @@ export function PhotoMapView({ photos, onBack, title, onAfterDelete }: PhotoMapV
             };
             src.setData(line);
           } else {
-            src.setData(empty);
+            src.setData(empty); // 같은 날 1장 → 선 없음(그래도 앵커=줌인)
           }
+          return true;
         };
-        map.on('click', () => { setConnector(null); setSelected(null); }); // 캔버스(빈 영역) 클릭 → 해제
+        // 같은 날 핀 그룹을 한 화면에(하단 액션바 회피 패딩 + 컨테이너 높이 클램프).
+        const focusOnDay = (anchor: PhotoRef) => {
+          if (!map || cancelled) return;
+          const b = connectedBounds(photos, anchor, MIN_SPAN);
+          if (!b) return;
+          const h = map.getContainer().clientHeight;
+          const bottom = Math.min(FOCUS_BOTTOM_PAD, Math.max(40, h * 0.4)); // 짧은 임베드에서 과패딩 방지
+          map.fitBounds(b, {
+            padding: { top: 40, right: 40, bottom, left: 40 },
+            duration: CAMERA_DURATION, maxZoom: FOCUS_MAX_ZOOM,
+          });
+        };
+        // 전체 사진 bbox로 줌아웃(초기 framing과 동일, 애니메이션만 적용).
+        const resetCamera = () => {
+          if (!map || cancelled) return;
+          map.fitBounds(paddedBounds(bbox, MIN_SPAN), { padding: 40, duration: CAMERA_DURATION, maxZoom: 14 });
+        };
+        map.on('click', () => { setConnector(null); setSelected(null); resetCamera(); }); // 빈 영역 → 해제+줌아웃
 
         // 핀(썸네일 blob → objectURL Marker). 없으면 점.
         const r = repo();
@@ -131,23 +154,20 @@ export function PhotoMapView({ photos, onBack, title, onAfterDelete }: PhotoMapV
               elm.style.backgroundImage = `url(${url})`;
             }
             elm.style.cursor = 'pointer';
-            elm.addEventListener('click', (ev) => { ev.stopPropagation(); setConnector(p); setSelected(p); });
+            elm.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              const anchored = setConnector(p);
+              setSelected(p);
+              if (anchored) focusOnDay(p); else resetCamera(); // 앵커=줌인 / 같은날 재클릭=줌아웃(선 상태 미러)
+            });
             new maplibre.Marker({ element: elm }).setLngLat([p.lon, p.lat]).addTo(map);
           } catch {
             // 개별 핀 실패(이상 좌표 등)는 건너뜀.
           }
         }
 
-        // bbox 카메라(최소 span 클램프).
-        const latPad = Math.max((bbox.maxLat - bbox.minLat) * 0.2, MIN_SPAN / 2);
-        const lonPad = Math.max((bbox.maxLon - bbox.minLon) * 0.2, MIN_SPAN / 2);
-        map.fitBounds(
-          [
-            [bbox.minLon - lonPad, bbox.minLat - latPad],
-            [bbox.maxLon + lonPad, bbox.maxLat + latPad],
-          ],
-          { padding: 40, duration: 0, maxZoom: 14 },
-        );
+        // 초기 bbox 카메라(전체 사진). 즉시(애니메이션 0).
+        map.fitBounds(paddedBounds(bbox, MIN_SPAN), { padding: 40, duration: 0, maxZoom: 14 });
       });
     })();
 

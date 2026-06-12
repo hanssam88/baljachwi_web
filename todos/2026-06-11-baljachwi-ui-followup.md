@@ -140,3 +140,34 @@
 - `repo.setWantToGo` 4테이블 rw 트랜잭션 원자성(부분 실패 롤백) + 골든 `setWantToGo`가 visited 행 양방향 보존(데이터 손실 방지). regions 외 미터치.
 - 골든 코어(src/core/*·reconcile·storeOps·db·scanPipeline) diff 0건. db 스키마(regionStatuses PK=regionCode, photoRefs regionCode 인덱스 없음) 의존 정확(get 단건 / JS 필터).
 - 맵 생성 effect deps `[ack, level]` 불변, 강조·선택은 ref 미러+별도 effect로만 갱신 → 색칠/타일 동의/맵 재생성 흐름 미파괴. click 이중 발화 없음(전역 click은 region-fill 히트 0일 때만 해제). `map.remove()`가 리스너 정리 → 누수 없음. objectURL 생명주기(PhotoMapView 재사용 경로) 정상.
+
+---
+
+# 경로지도 핀 클릭 → 같은-날 연결 핀 한 화면 줌인 후속 이슈
+
+> 작성일: 2026-06-12 / 출처: feat/photo-pin-focus-zoom 멀티에이전트 리뷰(Code Reviewer + Security Engineer)
+> 양쪽 High 0건 / Code Reviewer Medium 0건 / Security Medium 1건. 머지 가능 판정.
+> Code Reviewer Low(ratio 양성 테스트)는 본 브랜치 반영 완료(mapCamera.test.ts 9케이스). 아래는 잔여.
+
+## Medium → 기존 결함·스코프 외(조치 보류, 별도 PR)
+
+- [ ] **NaN/Infinity 좌표 시 fitBounds throw 가능** (Security) — `src/lib/photosBBox.ts` / `src/components/trip/PhotoMapView.tsx` 초기·reset fitBounds(try/catch 밖)
+  - 손상 EXIF로 `lat`/`lon`이 `NaN`이면 `photosBBox`가 NaN bbox 전파 → `map.fitBounds(NaN)` throw로 앱 크래시 가능. 핀 줌 경로(`connectedBounds`/`focusOnDay`)가 이 미보강 지점의 **세 번째 소비자**가 됨(앞서 line 33-36 "EXIF 좌표 NaN/Infinity 방어"와 동일 근본원인).
+  - 본 변경이 신규 도입한 결함 아님(초기 fit은 변경 전에도 동일 경로). plan상 `photosBBox`는 명시적 미변경 대상 + 데이터는 repo()/스캔 파이프라인 상류 정제 가정 → 본 브랜치 스코프 외.
+  - **근본 수정 위치는 상류**: `src/core/photoScan.ts`/`src/lib/exif.ts:60-61` 좌표 필터에 `Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat)<=90 && Math.abs(lon)<=180` 추가(코어 변경=골든 영향 검토 후 별도 PR). 위 line 33-36 항목으로 일원화.
+
+## Low (선택적)
+
+- [ ] **줌아웃(reset) fitBounds 옵션 상수화** (Code Reviewer, `src/components/trip/PhotoMapView.tsx`)
+  - 초기 마운트 fit과 `resetCamera`가 둘 다 `{ padding: 40, maxZoom: 14 }`로 "동일 framing" 계약을 갖지만 코드상 강제되지 않고 주석으로만 보장. 한쪽만 바뀌면 조용히 어긋남.
+  - 개선: `const RESET_OPTS = { padding: 40, maxZoom: 14 }`로 묶어 두 호출부 공유(duration만 0/600 차이). 동작 영향 없는 가독성 개선.
+
+- [ ] **클릭당 `sameDayPhotos` 2회 중복 실행** (Security, `src/lib/sameDayConnector.ts` 소비자)
+  - 핀 클릭 시 연결선(`dayConnectorCoords`)과 카메라(`connectedBounds`)가 각각 `sameDayPhotos`(O(N) filter + O(N log N) sort)를 호출 → 클릭당 2회 중복. 보안 위협 아님(성능 정리 수준).
+  - 개선: 호출부에서 `sameDayPhotos` 1회 계산 후 좌표·bbox 양쪽에 공유. 대용량 사진셋에서만 체감.
+
+## Security/Code(검증 완료 — 조치 불요)
+
+- 좌표 외부 전송/로깅 0건(`mapCamera.ts`에 fetch/console/localStorage/sendBeacon 전무). `fitBounds`는 로컬 카메라 조작뿐 → 추가 외부 호출 없음. 타일 동의(ack) 게이트 밖 타일 로드 경로 없음(카메라 로직 전부 `map.on('load')` 내부).
+- `paddedBounds` 수치 드리프트 0(pre-refactor 인라인 수식과 연산·클램프·SW→NE 튜플 완전 동일). `connectedBounds` null 계약 + anchor 항상 포함(`sameDayPhotos` inclusive). `setConnector` boolean이 선 토글(`selectedDay`)과 카메라(줌인/줌아웃)를 항상 일치시킴. 삭제 플로우(`setSelected` 분기 무관 호출) 미파괴.
+- load 클로저가 effect 재생성(`[ack, photosKey]`)마다 최신 `photos`/`bbox` 신선 캡처 + `!map||cancelled` 가드 유지. 하단 패딩 클램프 `Math.min(96, Math.max(40, h*0.4))`는 h=0에서도 NaN/음수/과줌 없음(=40). 골든 코어/reconcile/storeOps/db/scanPipeline diff 0(타입만 import).
