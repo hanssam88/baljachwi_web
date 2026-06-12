@@ -27,23 +27,23 @@ export function LevelToggle({ level, onChange }: { level: Level; onChange: (l: L
   );
 }
 
+// 헤더 한 행에 인라인 배치 — 가운데 정렬 margin 제거하고 내용 너비로 축소.
 const seg: CSSProperties = {
-  display: 'flex',
-  margin: 'var(--space-2) auto 0',
-  maxWidth: 220,
+  display: 'inline-flex',
+  flexShrink: 0,
   background: 'var(--fill)',
   borderRadius: 'var(--radius-sm)',
   padding: 2,
 };
 const segBtn: CSSProperties = {
-  flex: 1,
   border: 'none',
   background: 'transparent',
-  padding: '6px 0',
+  padding: '5px 12px',
   fontSize: TYPE.caption.size,
   color: 'var(--label2)',
   borderRadius: 6,
   cursor: 'pointer',
+  whiteSpace: 'nowrap',
 };
 const segBtnOn: CSSProperties = {
   background: 'var(--surface)',

@@ -9,11 +9,14 @@ export function StatCard({
   unit,
   label,
   progress,
+  dense = false,
 }: {
   value: number | string;
   unit?: string;
   label: string;
   progress?: { current: number; total: number };
+  /** dense: 헤더 한 행에 들어가는 컴팩트 가로형(작은 숫자·얇은 바·우측 정렬). */
+  dense?: boolean;
 }) {
   // total>0 인 실데이터일 때만 진행률 계산 — 그 외에는 바 미표시(가상 통계 방지).
   const pct =
@@ -22,15 +25,15 @@ export function StatCard({
       : null;
 
   return (
-    <div style={card}>
-      <div style={numberRow}>
-        <span style={big}>{value}</span>
-        {unit && <span style={unitText}>{unit}</span>}
+    <div style={dense ? cardDense : card}>
+      <div style={dense ? numberRowDense : numberRow}>
+        <span style={dense ? bigDense : big}>{value}</span>
+        {unit && <span style={dense ? unitDense : unitText}>{unit}</span>}
       </div>
-      <p style={labelText}>{label}</p>
+      <p style={dense ? labelDense : labelText}>{label}</p>
       {pct !== null && (
         <div
-          style={track}
+          style={dense ? trackDense : track}
           role="progressbar"
           aria-label={label}
           aria-valuenow={pct}
@@ -82,4 +85,37 @@ const fill: CSSProperties = {
   borderRadius: 999,
   background: 'var(--accent)',
   transition: 'width .3s ease',
+};
+
+// ---- dense: 헤더 한 행용 컴팩트 변형(우측 정렬, 작은 타이포, 얇은 바) ----
+const cardDense: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-end',
+  gap: 2,
+  background: 'transparent',
+  padding: 0,
+};
+const numberRowDense: CSSProperties = { display: 'flex', alignItems: 'baseline', gap: 2 };
+const bigDense: CSSProperties = {
+  fontSize: 20,
+  fontWeight: 700,
+  lineHeight: 1,
+  color: 'var(--label)',
+  letterSpacing: '-0.5px',
+};
+const unitDense: CSSProperties = { fontSize: 13, fontWeight: 600, color: 'var(--label2)' };
+const labelDense: CSSProperties = {
+  margin: 0,
+  fontSize: 11,
+  lineHeight: 1,
+  color: 'var(--label2)',
+  whiteSpace: 'nowrap',
+};
+const trackDense: CSSProperties = {
+  height: 4,
+  width: 72,
+  borderRadius: 999,
+  background: 'var(--fill)',
+  overflow: 'hidden',
 };

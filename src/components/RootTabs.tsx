@@ -39,7 +39,7 @@ export function RootTabs() {
   const showOnboarding = !hasPhotos || reimport;
 
   return (
-    <div style={shell}>
+    <div style={shell} data-testid="app-shell">
       {hasPhotos && (
         <header style={topbar}>
           <button type="button" style={topBtn} onClick={() => setReimport((v) => !v)}>
@@ -97,10 +97,13 @@ export function RootTabs() {
   );
 }
 
+// 뷰포트 높이로 고정 + 자체 스크롤 차단 → 내부 main 만 스크롤하고
+// 하단 탭바(nav)는 항상 화면에 고정(여행 목록이 길어도 밀려나지 않음).
 const shell: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  minHeight: '100dvh',
+  height: '100dvh',
+  overflow: 'hidden',
 };
 
 // 상단 헤더(사진 있을 때 양쪽 탭 공통) — 재업로드 토글 버튼.
@@ -124,8 +127,12 @@ const topBtn: CSSProperties = {
 };
 
 // 온보딩(빈 상태)은 중앙 정렬, 지도(채움)는 전체 채움.
+// 셸이 overflow:hidden 이므로 짧은 뷰포트에서 온보딩 카드(프라이버시 문구 포함)가
+// 잘리지 않도록 이 영역만 세로 스크롤 허용.
 const content: CSSProperties = {
   flex: 1,
+  minHeight: 0,
+  overflowY: 'auto',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',

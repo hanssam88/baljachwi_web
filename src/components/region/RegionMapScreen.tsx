@@ -5,8 +5,8 @@
 
 import { useState, type CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
-import { ScreenHeader } from '@/components/common/ScreenHeader';
 import { StatCard } from '@/components/common/StatCard';
+import { TYPE } from '@/lib/tokens';
 import { LevelToggle, type Level } from '@/components/region/LevelToggle';
 import { Legend } from '@/components/region/Legend';
 import { RegionDetailSheet } from '@/components/region/RegionDetailSheet';
@@ -57,16 +57,18 @@ export function RegionMapScreen() {
 
   return (
     <div style={screen}>
-      <ScreenHeader title="지역지도" />
-      <div style={controls}>
+      {/* 타이틀 · 레벨토글 · 정복 통계를 한 행에 — 세로 공간을 줄여 지도를 최대화. */}
+      <header style={header} data-testid="region-header">
+        <h1 style={titleText}>지역지도</h1>
         <LevelToggle level={level} onChange={changeLevel} />
         <StatCard
+          dense
           value={visitedCount}
           unit={`/ ${total}`}
           label={`${levelLabel} 정복`}
           progress={{ current: visitedCount, total }}
         />
-      </div>
+      </header>
       <div style={mapFrame}>
         <RegionMapView level={level} stateByCode={stateByCode} selectedCode={selected} onSelectRegion={handleSelect} />
       </div>
@@ -88,11 +90,25 @@ export function RegionMapScreen() {
 }
 
 const screen: CSSProperties = { position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 };
-const controls: CSSProperties = {
+// 한 행 헤더: 타이틀(좌) · 레벨토글(중) · 정복 통계(우) — space-between 으로 양끝 정렬.
+const header: CSSProperties = {
   display: 'flex',
-  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  // flexWrap: 목표 폭(>=375px)에선 한 줄 유지. 초협소(~320px) 단말에서만 통계가 다음 줄로
+  // 내려가 가로 오버플로를 막는 안전망(한 줄 배치를 깨지 않음).
+  flexWrap: 'wrap',
   gap: 'var(--space-2)',
-  padding: '0 var(--space-3) var(--space-2)',
+  padding: 'var(--space-2) var(--space-3) var(--space-1)',
+};
+const titleText: CSSProperties = {
+  margin: 0,
+  flexShrink: 0,
+  fontSize: TYPE.title2.size,
+  fontWeight: TYPE.title2.weight,
+  lineHeight: 1.1,
+  letterSpacing: '-0.5px',
+  color: 'var(--label)',
 };
 // 지도를 둥근 카드 프레임 안에 — Direction A 부드러운 코너. RegionMapView(flex:1)가 채운다.
 const mapFrame: CSSProperties = {

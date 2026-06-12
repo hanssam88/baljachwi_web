@@ -18,7 +18,7 @@ vi.mock('@/lib/regionLayerStyle', () => ({ levelLayerConfig: () => ({ total: 100
 
 import { RegionMapScreen } from '@/components/region/RegionMapScreen';
 
-describe('RegionMapScreen — Direction A 헤더(ScreenHeader + StatCard 실데이터)', () => {
+describe('RegionMapScreen — 컴팩트 헤더(타이틀 heading + StatCard 실데이터 진행률)', () => {
   it('타이틀(지역지도)을 heading 으로 렌더', () => {
     render(<RegionMapScreen />);
     expect(screen.getByRole('heading', { name: '지역지도' })).toBeInTheDocument();
