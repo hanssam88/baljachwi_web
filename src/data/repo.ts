@@ -10,7 +10,7 @@ import type { BaljachwiDB } from '@/data/db';
 import { getDB } from '@/data/db';
 import type { PipelineResult } from '@/core/scanPipeline';
 import { createEmptyStore, pinnedPhotoIDs as storePinnedIDs, type DataStore } from '@/data/storeOps';
-import { reconcile, apply, type ReconcileResult, type ApplyResult } from '@/data/reconcile';
+import { reconcile, apply, setWantToGo as setWantToGoStore, type ReconcileResult, type ApplyResult } from '@/data/reconcile';
 import { deletePhotosFromStore } from '@/data/deleteOps';
 import type { PhotoRef, TripRecord, RegionStatus } from '@/data/models';
 import { HOME_CACHE_ROW_ID } from '@/data/models';
@@ -126,6 +126,23 @@ export function makeRepo(db: BaljachwiDB) {
           deletePhotosFromStore(store, ids);
           await writeBack(db, store);
           await db.thumbs.bulkDelete(ids);
+        },
+      );
+    },
+
+    /** 가고싶음 토글(시군구). 골든 setWantToGo 순수 op을 트랜잭션으로 감쌈.
+     *  regions만 바뀌나 loadStore/writeBack 계약상 4테이블 rw(reconcileScan 패턴). */
+    async setWantToGo(regionCode: string, on: boolean): Promise<void> {
+      await db.transaction(
+        'rw',
+        db.photoRefs,
+        db.regionStatuses,
+        db.tripRecords,
+        db.homeCache,
+        async () => {
+          const store = await loadStore(db);
+          setWantToGoStore(store, regionCode, on);
+          await writeBack(db, store);
         },
       );
     },
