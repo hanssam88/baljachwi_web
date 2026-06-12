@@ -21,13 +21,18 @@ const KOREA_BOUNDS: [[number, number], [number, number]] = [
   [130.0, 38.65],
 ];
 const HANGUL_FONT = "'Apple SD Gothic Neo','Noto Sans KR',sans-serif";
+const HIGHLIGHT_NONE = '__none__'; // 선택 없음 sentinel(어느 feature.id와도 불일치)
 
 export function RegionMapView({
   level,
   stateByCode,
+  selectedCode,
+  onSelectRegion,
 }: {
   level: Level;
   stateByCode: Record<string, VisitState>;
+  selectedCode?: string | null;
+  onSelectRegion?: (code: string | null) => void;
 }) {
   const mapEl = useRef<HTMLDivElement>(null);
   const [needNotice, setNeedNotice] = useState(false);
@@ -38,6 +43,11 @@ export function RegionMapView({
   // feature-state 갱신이 최신 상태를 읽도록 ref 미러(effect 재생성 없이 갱신).
   const stateRef = useRef(stateByCode);
   stateRef.current = stateByCode;
+  // 선택/콜백도 ref 미러(맵 생성 effect 재실행 없이 최신값 참조).
+  const onSelectRef = useRef(onSelectRegion);
+  onSelectRef.current = onSelectRegion;
+  const selectedRef = useRef<string | null>(selectedCode ?? null);
+  selectedRef.current = selectedCode ?? null;
   const stateKey = useMemo(
     () =>
       Object.keys(stateByCode)
@@ -53,6 +63,12 @@ export function RegionMapView({
     for (const [code, state] of Object.entries(stateRef.current)) {
       map.setFeatureState({ source: 'regions', id: code }, { state });
     }
+  };
+
+  // 선택 지역 강조: region-highlight 라인 레이어 필터를 선택 코드로. 미선택이면 어느 것도 불일치.
+  const applyHighlight = (map: import('maplibre-gl').Map) => {
+    if (!map.getLayer('region-highlight')) return;
+    map.setFilter('region-highlight', ['==', ['to-string', ['id']], selectedRef.current ?? HIGHLIGHT_NONE]);
   };
 
   // 최초 진입 1회 타일 고지(경로지도와 키 공유 → 한쪽에서 동의했으면 통과).
@@ -119,8 +135,31 @@ export function RegionMapView({
           },
         });
 
+        const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2E7D5B';
+        map.addLayer({
+          id: 'region-highlight',
+          type: 'line',
+          source: 'regions',
+          paint: { 'line-color': accent, 'line-width': 3 },
+          filter: ['==', ['to-string', ['id']], HIGHLIGHT_NONE],
+        });
+
+        // 시군구 채움 클릭 → 선택 콜백(feature.id=promoteId 지역코드).
+        map.on('click', 'region-fill', (e) => {
+          const f = e.features?.[0];
+          if (f) onSelectRef.current?.(String(f.id));
+        });
+        // 빈 영역(지역 밖) 클릭 → 선택 해제. region-fill 히트가 없을 때만.
+        map.on('click', (e) => {
+          const hits = map.queryRenderedFeatures(e.point, { layers: ['region-fill'] });
+          if (hits.length === 0) onSelectRef.current?.(null);
+        });
+        map.on('mouseenter', 'region-fill', () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', 'region-fill', () => { map.getCanvas().style.cursor = ''; });
+
         loadedRef.current = true;
         applyStates(map);
+        applyHighlight(map);
       });
     })();
 
@@ -140,6 +179,13 @@ export function RegionMapView({
     if (map && loadedRef.current) applyStates(map);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stateKey]);
+
+  // 선택 변경 시 재생성 없이 강조 필터만 갱신(applyStates/stateKey와 동일 패턴).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && loadedRef.current) applyHighlight(map);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCode]);
 
   const accept = () => {
     setTileConsent();
