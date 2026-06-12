@@ -35,3 +35,27 @@ describe('DayGroupRow', () => {
     expect(onManage).toHaveBeenCalledWith(group);
   });
 });
+
+describe('DayGroupRow — Direction A 카드(커버 썸네일 + dots 아이콘)', () => {
+  it('coverUrl 이 있으면 커버 이미지로 렌더', () => {
+    const { container } = render(
+      <DayGroupRow group={group} names={names} coverUrl="blob:cover" onOpen={() => {}} onManage={() => {}} />,
+    );
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute('src')).toBe('blob:cover');
+  });
+  it('coverUrl 이 없으면 이미지 대신 플레이스홀더(svg) 노출', () => {
+    const { container } = render(
+      <DayGroupRow group={group} names={names} onOpen={() => {}} onManage={() => {}} />,
+    );
+    expect(container.querySelector('img')).toBeNull();
+    // 플레이스홀더(camera) + dots = 최소 2개 svg.
+    expect(container.querySelectorAll('svg').length).toBeGreaterThanOrEqual(2);
+  });
+  it('더보기(⋯)는 dots SVG 아이콘으로 렌더하되 aria-label 유지', () => {
+    render(<DayGroupRow group={group} names={names} onOpen={() => {}} onManage={() => {}} />);
+    const btn = screen.getByRole('button', { name: '더보기' });
+    expect(btn.querySelector('svg')).not.toBeNull();
+  });
+});

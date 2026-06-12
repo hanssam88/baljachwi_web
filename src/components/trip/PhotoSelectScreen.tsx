@@ -115,9 +115,9 @@ const check: CSSProperties = {
   background: 'var(--accent)', color: '#fff', fontSize: 13, lineHeight: '22px', textAlign: 'center',
 };
 const footer: CSSProperties = { padding: 'var(--space-3)', borderTop: '1px solid var(--separator)', background: 'var(--surface)' };
-const errorText: CSSProperties = { margin: '0 0 var(--space-2)', fontSize: 13, color: '#C2453A', textAlign: 'center' };
+const errorText: CSSProperties = { margin: '0 0 var(--space-2)', fontSize: 13, color: 'var(--danger)', textAlign: 'center' };
 const delBtn: CSSProperties = {
   width: '100%', padding: '12px 0', border: 'none', borderRadius: 'var(--radius-md)',
-  background: '#C2453A', color: '#fff', fontSize: 16, fontWeight: 600, cursor: 'pointer',
+  background: 'var(--danger)', color: '#fff', fontSize: 16, fontWeight: 600, cursor: 'pointer',
 };
 const delBtnOff: CSSProperties = { ...delBtn, background: 'var(--fill)', color: 'var(--label3)', cursor: 'default' };

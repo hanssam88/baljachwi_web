@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from 
 import { TYPE } from '@/lib/tokens';
 import { pickImages, filesFromDrop } from '@/lib/filePick';
 import { useScan } from '@/hooks/useScan';
+import { Icon } from '@/components/common/Icon';
 
 export function ImportOnboarding({
   mode = 'reconcile',
@@ -58,9 +59,15 @@ export function ImportOnboarding({
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
       >
+        <div style={hero}>
+          <Icon name="footprint" size={32} color="var(--accent)" label="발자취" />
+        </div>
         <p style={title}>아직 가져온 사진이 없습니다</p>
         <p style={sub}>지오태그가 있는 사진을 가져오면 지역지도와 경로지도가 채워집니다</p>
-        <p style={privacy}>사진은 기기 밖으로 전송되지 않습니다</p>
+        <p style={privacy}>
+          <Icon name="lock" size={13} color="var(--label3)" />
+          사진은 기기 밖으로 전송되지 않습니다
+        </p>
 
         <button type="button" style={cta} disabled={busy} onClick={() => inputRef.current?.click()}>
           {busy ? '처리 중…' : '사진 가져오기'}
@@ -100,6 +107,16 @@ export function ImportOnboarding({
 
 const wrap: CSSProperties = { width: '100%', maxWidth: 420, margin: '0 auto' };
 
+const hero: CSSProperties = {
+  width: 64,
+  height: 64,
+  margin: '0 auto var(--space-4)',
+  display: 'grid',
+  placeItems: 'center',
+  borderRadius: 'var(--radius-xl)',
+  background: 'var(--fill)',
+};
+
 const dropzone: CSSProperties = {
   border: '2px dashed var(--separator)',
   borderRadius: 'var(--radius-lg)',
@@ -126,6 +143,9 @@ const sub: CSSProperties = {
 };
 const privacy: CSSProperties = {
   marginTop: 'var(--space-1)',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 'var(--space-1)',
   fontSize: TYPE.caption.size,
   color: 'var(--label3)',
 };
@@ -168,6 +188,6 @@ const progressLabel: CSSProperties = {
 const errorText: CSSProperties = {
   marginTop: 'var(--space-4)',
   fontSize: TYPE.subheadline.size,
-  color: '#C2453A',
+  color: 'var(--danger)',
   textAlign: 'center',
 };

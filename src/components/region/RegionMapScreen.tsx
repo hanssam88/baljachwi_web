@@ -5,7 +5,8 @@
 
 import { useState, type CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
-import { StatHeader } from '@/components/region/StatHeader';
+import { ScreenHeader } from '@/components/common/ScreenHeader';
+import { StatCard } from '@/components/common/StatCard';
 import { LevelToggle, type Level } from '@/components/region/LevelToggle';
 import { Legend } from '@/components/region/Legend';
 import { RegionDetailSheet } from '@/components/region/RegionDetailSheet';
@@ -52,12 +53,23 @@ export function RegionMapScreen() {
   }
 
   const sheetState: VisitState = row?.state ?? 'notVisited';
+  const levelLabel = level === 'sigungu' ? '시군구' : '시도';
 
   return (
     <div style={screen}>
-      <LevelToggle level={level} onChange={changeLevel} />
-      <StatHeader level={level} visitedCount={visitedCount} total={total} />
-      <RegionMapView level={level} stateByCode={stateByCode} selectedCode={selected} onSelectRegion={handleSelect} />
+      <ScreenHeader title="지역지도" />
+      <div style={controls}>
+        <LevelToggle level={level} onChange={changeLevel} />
+        <StatCard
+          value={visitedCount}
+          unit={`/ ${total}`}
+          label={`${levelLabel} 정복`}
+          progress={{ current: visitedCount, total }}
+        />
+      </div>
+      <div style={mapFrame}>
+        <RegionMapView level={level} stateByCode={stateByCode} selectedCode={selected} onSelectRegion={handleSelect} />
+      </div>
       <Legend />
       {selected && (
         <RegionDetailSheet
@@ -76,6 +88,22 @@ export function RegionMapScreen() {
 }
 
 const screen: CSSProperties = { position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 };
+const controls: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'var(--space-2)',
+  padding: '0 var(--space-3) var(--space-2)',
+};
+// 지도를 둥근 카드 프레임 안에 — Direction A 부드러운 코너. RegionMapView(flex:1)가 채운다.
+const mapFrame: CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  display: 'flex',
+  margin: '0 var(--space-3) var(--space-2)',
+  borderRadius: 'var(--radius-xl)',
+  overflow: 'hidden',
+  background: 'var(--surface2)',
+};
 const loading: CSSProperties = {
   flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--label2)',
 };

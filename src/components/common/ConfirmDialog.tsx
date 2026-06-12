@@ -44,5 +44,5 @@ const cancelBtn: CSSProperties = {
 };
 const confirmBtn: CSSProperties = {
   flex: 1, padding: '8px 0', border: 'none', borderRadius: 'var(--radius-md)',
-  background: '#C2453A', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+  background: 'var(--danger)', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer',
 };

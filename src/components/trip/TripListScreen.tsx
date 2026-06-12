@@ -4,6 +4,7 @@
 import { useState, type CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
 import { useDayGroups, useRegionNames } from '@/hooks/useTrips';
+import { useThumbUrls } from '@/hooks/useThumbUrls';
 import { DayGroupRow } from '@/components/trip/DayGroupRow';
 import { PhotoSelectScreen } from '@/components/trip/PhotoSelectScreen';
 import { dayLabel, type DayGroup } from '@/lib/dayGroups';
@@ -19,6 +20,11 @@ export function TripListScreen() {
   const names = useRegionNames();
   const [open, setOpen] = useState<DayGroup | null>(null);
   const [manage, setManage] = useState<DayGroup | null>(null);
+  // 각 그룹 대표(첫) 사진의 썸네일을 커버로. 훅 규칙상 조건부 반환 이전에 호출.
+  const coverIds = (groups ?? [])
+    .map((g) => g.photos[0]?.localIdentifier)
+    .filter((id): id is string => !!id);
+  const coverUrls = useThumbUrls(coverIds);
 
   if (open) {
     // open.photos는 스냅샷(라이브 아님) → 핀 삭제 후 onAfterDelete로 닫아 라이브 목록 복귀.
@@ -47,7 +53,14 @@ export function TripListScreen() {
   return (
     <div style={list}>
       {groups.map((g) => (
-        <DayGroupRow key={g.localDay} group={g} names={names} onOpen={setOpen} onManage={setManage} />
+        <DayGroupRow
+          key={g.localDay}
+          group={g}
+          names={names}
+          coverUrl={coverUrls[g.photos[0]?.localIdentifier ?? '']}
+          onOpen={setOpen}
+          onManage={setManage}
+        />
       ))}
     </div>
   );

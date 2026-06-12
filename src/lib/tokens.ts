@@ -25,6 +25,12 @@ export const STATUS_SEMANTIC = {
   dark: { visited: '#4FB888', want: '#F0B84E', unvisited: '#38383E' },
 } as const;
 
+// ---- Danger — 삭제·오류 등 위험 액션 의미색(accent·palette 독립, appearance-aware) ----
+export const DANGER = {
+  light: '#C2453A',
+  dark: '#E0695E',
+} as const;
+
 // ---- Status — Model B: 단일 액센트 3단 계조 ----
 export const STATUS_MONO = {
   nature: { light: { visited: '#2E7D5B', want: '#8FC3AB', unvisited: '#DEEAE3' }, dark: { visited: '#5BC08A', want: '#357056', unvisited: '#1F2A24' } },
@@ -33,7 +39,8 @@ export const STATUS_MONO = {
 } as const;
 
 export const SPACE = [4, 8, 12, 16, 20, 24] as const;
-export const RADIUS = { sm: 8, md: 12, lg: 16 } as const;
+// xl(20): Direction A 이식 — 큰 카드·바텀시트·지도 컨테이너의 부드러운 코너 위계.
+export const RADIUS = { sm: 8, md: 12, lg: 16, xl: 20 } as const;
 
 // ---- Type scale (iOS text styles → 웹 px/weight) ----
 // design/tokens.js TYPE 의 의도(token·weight)를 웹 수치로 이식. weight: bold=700/semibold=600/regular=400.
@@ -74,6 +81,7 @@ export function resolveTokens(
     '--st-visited': st.visited,
     '--st-want': st.want,
     '--st-unvisited': st.unvisited,
+    '--danger': DANGER[appearance],
   };
 }
 

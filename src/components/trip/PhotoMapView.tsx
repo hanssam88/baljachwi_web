@@ -15,6 +15,7 @@ import { paddedBounds, connectedBounds } from '@/lib/mapCamera';
 import { hasTileConsent, setTileConsent } from '@/components/map/tileConsent';
 import { TileNotice } from '@/components/map/TileNotice';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { Icon } from '@/components/common/Icon';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
 const MIN_SPAN = 0.01; // ≈1km — 단일/근접 사진 과도 줌 방지(iOS minSpan)
@@ -29,9 +30,11 @@ export interface PhotoMapViewProps {
   title?: string;
   /** 핀 삭제 성공 후 호출(스냅샷 뷰는 닫아 라이브 복귀). 미전달 시 liveQuery 자동 갱신에 의존. */
   onAfterDelete?: () => void;
+  /** 지도 위 안내 칩(예: 경로지도의 "핀을 탭하면 같은 날 경로가 이어져요"). 없으면 미표시. */
+  hint?: string;
 }
 
-export function PhotoMapView({ photos, onBack, title, onAfterDelete }: PhotoMapViewProps) {
+export function PhotoMapView({ photos, onBack, title, onAfterDelete, hint }: PhotoMapViewProps) {
   const mapEl = useRef<HTMLDivElement>(null);
   const [needNotice, setNeedNotice] = useState(false);
   const [ack, setAck] = useState(false);
@@ -217,12 +220,16 @@ export function PhotoMapView({ photos, onBack, title, onAfterDelete }: PhotoMapV
       ) : (
         <div style={mapWrap}>
           <div ref={mapEl} style={mapBox} />
+          {hint && !selected && <div style={hintChip}>{hint}</div>}
           {needNotice && <TileNotice onAccept={acceptNotice} />}
           {error && <div style={errorBanner} role="alert">{error}</div>}
           {selected && !confirming && (
             <div style={actionBar}>
               {/* disabled={busy}: 삭제 진행 중 stale 핀 재클릭 방지(H-1). 빠른 재클릭은 Task 10 실측 확인. */}
-              <button type="button" style={delPinBtn} disabled={busy} onClick={() => setConfirming(true)}>이 사진 삭제</button>
+              <button type="button" style={delPinBtn} disabled={busy} onClick={() => setConfirming(true)}>
+                <Icon name="trash" size={18} />
+                이 사진 삭제
+              </button>
               <button type="button" style={cancelPinBtn} onClick={() => setSelected(null)}>취소</button>
             </div>
           )}
@@ -250,7 +257,17 @@ const backBtn: CSSProperties = {
 };
 const barTitle: CSSProperties = { fontSize: 15, fontWeight: 600, color: 'var(--label)' };
 const mapWrap: CSSProperties = { position: 'relative', flex: 1, minHeight: 0 };
-const mapBox: CSSProperties = { position: 'absolute', inset: 0 };
+// Direction A: 지도를 부드러운 코너 카드로(절대배치 캔버스 코너 클립). 레이아웃 크기는 불변.
+const mapBox: CSSProperties = { position: 'absolute', inset: 0, borderRadius: 'var(--radius-xl)', overflow: 'hidden' };
+// 지도 위 안내 칩(상단 중앙). 선택 액션바 노출 시엔 숨김.
+const hintChip: CSSProperties = {
+  position: 'absolute', top: 'var(--space-3)', left: '50%', transform: 'translateX(-50%)',
+  maxWidth: 'calc(100% - var(--space-5))', padding: '6px 14px', borderRadius: 999,
+  background: 'color-mix(in srgb, var(--surface) 90%, transparent)',
+  backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+  boxShadow: '0 1px 6px rgba(0,0,0,0.12)', color: 'var(--label)',
+  fontSize: 13, fontWeight: 600, textAlign: 'center', zIndex: 12, pointerEvents: 'none',
+};
 const empty: CSSProperties = {
   flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--label2)',
 };
@@ -262,12 +279,13 @@ const actionBar: CSSProperties = {
 // 삭제 실패 시 상단 토스트. 액션바(하단)와 겹치지 않게 위쪽 배치. 다음 photosKey 변동/재시도 시 해제.
 const errorBanner: CSSProperties = {
   position: 'absolute', left: 'var(--space-3)', right: 'var(--space-3)', top: 'var(--space-3)',
-  padding: 'var(--space-2) var(--space-3)', background: '#C2453A', color: '#fff',
+  padding: 'var(--space-2) var(--space-3)', background: 'var(--danger)', color: '#fff',
   fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', textAlign: 'center', zIndex: 15,
 };
 const delPinBtn: CSSProperties = {
-  flex: 1, padding: '12px 0', border: 'none', borderRadius: 'var(--radius-md)',
-  background: '#C2453A', color: '#fff', fontSize: 16, fontWeight: 600, cursor: 'pointer',
+  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-2)',
+  padding: '12px 0', border: 'none', borderRadius: 'var(--radius-md)',
+  background: 'var(--danger)', color: '#fff', fontSize: 16, fontWeight: 600, cursor: 'pointer',
 };
 const cancelPinBtn: CSSProperties = {
   flex: 1, padding: '12px 0', border: '1px solid var(--separator)', borderRadius: 'var(--radius-md)',

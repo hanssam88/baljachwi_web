@@ -53,3 +53,31 @@ describe('RegionDetailSheet', () => {
     expect(props.onViewPhotos).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('RegionDetailSheet — Direction A 정제 (아이콘 + 데이터 정직성)', () => {
+  it('데이터 모델에 없는 방문횟수·세부지역 통계를 렌더하지 않는다', () => {
+    render(<RegionDetailSheet {...base()} state="visited" photoCount={3} firstVisit={1704034800} lastVisit={1710027000} />);
+    expect(screen.queryByText(/방문\s*\d+\s*회/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/세부\s*지역/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d+\s*\/\s*\d+/)).not.toBeInTheDocument(); // "n/m 세부지역" 류 비율 표기 부재
+  });
+
+  it('방문 시트: 닫기·날짜·사진보기에 SVG 아이콘 포함', () => {
+    render(<RegionDetailSheet {...base()} state="visited" photoCount={3} firstVisit={1704034800} lastVisit={1710027000} />);
+    const sheet = screen.getByRole('dialog');
+    expect(sheet.querySelectorAll('svg').length).toBeGreaterThanOrEqual(3); // 닫기 + 캘린더 + 카메라
+    expect(screen.getByRole('button', { name: '사진 보기' }).querySelector('svg')).not.toBeNull();
+  });
+
+  it('가고싶음 버튼에 SVG 아이콘(bookmark) 포함', () => {
+    render(<RegionDetailSheet {...base()} state="notVisited" photoCount={0} firstVisit={null} lastVisit={null} />);
+    expect(screen.getByRole('button', { name: '가고싶음 저장' }).querySelector('svg')).not.toBeNull();
+  });
+
+  it('scrim(배경) 탭 → onClose', async () => {
+    const props = base(); const user = userEvent.setup();
+    render(<RegionDetailSheet {...props} state="notVisited" photoCount={0} firstVisit={null} lastVisit={null} />);
+    await user.click(screen.getByTestId('sheet-scrim'));
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+});

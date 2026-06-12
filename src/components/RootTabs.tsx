@@ -8,13 +8,14 @@ import { ImportOnboarding } from '@/components/ImportOnboarding';
 import { RegionMapScreen } from '@/components/region/RegionMapScreen';
 import { RouteMapScreen } from '@/components/trip/RouteMapScreen';
 import { TripListScreen } from '@/components/trip/TripListScreen';
+import { Icon, type IconName } from '@/components/common/Icon';
 
 type TabKey = 'region' | 'route' | 'trips';
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'region', label: '지역지도' },
-  { key: 'route', label: '경로지도' },
-  { key: 'trips', label: '여행 목록' },
+const TABS: { key: TabKey; label: string; icon: IconName }[] = [
+  { key: 'region', label: '지역지도', icon: 'region' },
+  { key: 'route', label: '경로지도', icon: 'route' },
+  { key: 'trips', label: '여행 목록', icon: 'list' },
 ];
 
 // WAI-ARIA tabs 패턴 — 탭↔패널 연결용 안정 id.
@@ -42,7 +43,8 @@ export function RootTabs() {
       {hasPhotos && (
         <header style={topbar}>
           <button type="button" style={topBtn} onClick={() => setReimport((v) => !v)}>
-            {reimport ? '← 지도로' : '← 사진 업로드'}
+            <Icon name={reimport ? 'chevronLeft' : 'upload'} size={18} />
+            {reimport ? '지도로' : '사진 업로드'}
           </button>
         </header>
       )}
@@ -85,7 +87,8 @@ export function RootTabs() {
               }}
               style={{ ...tab, color: selected ? 'var(--accent)' : 'var(--label2)' }}
             >
-              {t.label}
+              <Icon name={t.icon} size={24} strokeWidth={selected ? 2 : 1.8} />
+              <span style={tabLabel}>{t.label}</span>
             </button>
           );
         })}
@@ -109,6 +112,9 @@ const topbar: CSSProperties = {
   background: 'var(--surface)',
 };
 const topBtn: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 'var(--space-1)',
   border: 'none',
   background: 'transparent',
   color: 'var(--accent)',
@@ -136,15 +142,27 @@ const contentFill: CSSProperties = {
 const tabbar: CSSProperties = {
   display: 'flex',
   borderTop: '1px solid var(--separator)',
-  background: 'var(--surface)',
+  // 반투명 surface + blur backdrop(Direction A) — 지도 위에 떠 있는 탭바 느낌.
+  background: 'color-mix(in srgb, var(--surface) 82%, transparent)',
+  backdropFilter: 'saturate(180%) blur(20px)',
+  WebkitBackdropFilter: 'saturate(180%) blur(20px)',
   paddingBottom: 'env(safe-area-inset-bottom, 0px)',
 };
 
 const tab: CSSProperties = {
   flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 3,
   border: 'none',
   background: 'transparent',
-  padding: '12px 0',
+  padding: '8px 0 7px',
+  cursor: 'pointer',
+};
+
+const tabLabel: CSSProperties = {
   fontSize: TYPE.caption.size,
   fontWeight: 600,
+  lineHeight: 1,
 };

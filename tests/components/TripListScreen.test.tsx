@@ -21,6 +21,8 @@ vi.mock('@/hooks/useTrips', () => ({
   useDayGroups: () => hooks.groups,
   useRegionNames: () => ({ R1: '부산 연제구' }),
 }));
+// 커버 썸네일 훅은 Dexie/objectURL을 건드리므로 jsdom 에서 빈 맵으로 차단.
+vi.mock('@/hooks/useThumbUrls', () => ({ useThumbUrls: () => ({}) }));
 
 const KST = 32400;
 function p(id: string): PhotoRef {

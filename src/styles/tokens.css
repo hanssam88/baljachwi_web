@@ -15,6 +15,7 @@
   --st-visited: #3A9D6B;
   --st-want: #E0982E;
   --st-unvisited: #DDDDE3;
+  --danger: #C2453A;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -26,6 +27,7 @@
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
+  --radius-xl: 20px;
 }
 
 [data-appearance="dark"] {
@@ -41,4 +43,5 @@
   --st-visited: #4FB888;
   --st-want: #F0B84E;
   --st-unvisited: #38383E;
+  --danger: #E0695E;
 }

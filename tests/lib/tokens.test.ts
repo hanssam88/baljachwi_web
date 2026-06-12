@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { resolveTokens, TYPE } from '@/lib/tokens';
+import { resolveTokens, TYPE, RADIUS } from '@/lib/tokens';
 
 // design/tokens.js 포트의 골든 — 확정 조합 nature + semantic 이 styles/tokens.css 와
 // 정확히 일치하는지 보장(단일 출처화). 드리프트 시 실패.
@@ -33,11 +35,19 @@ describe('resolveTokens', () => {
     expect(t['--st-unvisited']).toBe('#DEEAE3');
   });
 
+  it('danger 위험색을 라이트/다크로 노출 (accent·palette 독립)', () => {
+    expect(resolveTokens('nature', 'light', 'semantic')['--danger']).toBe('#C2453A');
+    expect(resolveTokens('nature', 'dark', 'semantic')['--danger']).toBe('#E0695E');
+    // 위험색은 accent/palette 와 무관하게 동일해야 한다(삭제·오류의 보편적 의미색)
+    expect(resolveTokens('nature', 'light', 'mono')['--danger']).toBe('#C2453A');
+    expect(resolveTokens('warm', 'light', 'semantic')['--danger']).toBe('#C2453A');
+  });
+
   it('모든 필수 CSS 변수 키를 포함', () => {
     const t = resolveTokens('nature', 'light', 'semantic');
     for (const key of [
       '--bg', '--surface', '--surface2', '--label', '--label2', '--label3',
-      '--separator', '--fill', '--accent', '--st-visited', '--st-want', '--st-unvisited',
+      '--separator', '--fill', '--accent', '--st-visited', '--st-want', '--st-unvisited', '--danger',
     ]) {
       expect(t[key], `누락된 토큰 키: ${key}`).toMatch(/^#[0-9A-Fa-f]{6}$/);
     }
@@ -60,5 +70,31 @@ describe('TYPE 스케일', () => {
     for (const s of Object.values(TYPE)) {
       expect([400, 600, 700]).toContain(s.weight);
     }
+  });
+});
+
+// RADIUS — Direction A 이식으로 큰 카드·시트·지도 컨테이너용 xl(20) 추가.
+describe('RADIUS 스케일', () => {
+  it('xl(20) 추가 — 기존 sm/md/lg 불변', () => {
+    expect(RADIUS).toEqual({ sm: 8, md: 12, lg: 16, xl: 20 });
+  });
+});
+
+// tokens.css ↔ tokens.ts 단일 출처 패리티 — 기존 골든은 TS 값만 검증했으나,
+// 신규 토큰(--danger/--radius-xl)은 실제 CSS 파일을 파싱해 드리프트를 차단한다.
+describe('tokens.css ↔ tokens.ts 패리티 (신규 토큰)', () => {
+  const css = readFileSync(resolve(process.cwd(), 'src/styles/tokens.css'), 'utf8');
+
+  it('라이트 블록에 --danger(#C2453A)·--radius-xl(20px) 존재', () => {
+    expect(css).toMatch(/--danger:\s*#C2453A/i);
+    expect(css).toMatch(/--radius-xl:\s*20px/i);
+  });
+
+  it('다크 블록에 --danger(#E0695E) 존재', () => {
+    expect(css).toMatch(/--danger:\s*#E0695E/i);
+  });
+
+  it('CSS 라이트 danger 값이 resolveTokens 결과와 일치', () => {
+    expect(resolveTokens('nature', 'light', 'semantic')['--danger']).toBe('#C2453A');
   });
 });

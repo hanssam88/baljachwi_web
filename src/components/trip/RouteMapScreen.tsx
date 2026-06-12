@@ -14,7 +14,7 @@ export function RouteMapScreen() {
   const photos = useAllPhotos();
   if (photos === undefined) return <div style={center}>불러오는 중…</div>;
   if (photos.length === 0) return <div style={center}>아직 표시할 사진이 없습니다</div>;
-  return <PhotoMapView photos={photos} />;
+  return <PhotoMapView photos={photos} hint="핀을 탭하면 같은 날 경로가 이어져요" />;
 }
 
 const center: CSSProperties = {
