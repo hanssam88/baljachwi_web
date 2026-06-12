@@ -66,7 +66,9 @@ export function TripListScreen() {
   );
 }
 
-const list: CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', width: '100%' };
+// overflowX 'hidden' 명시: overflowY 'auto'만 두면 명세상 overflowX가 visible→auto로 승격되어
+// 가로 흔들림이 생긴다. 세로만 스크롤, 좌우 고정.
+const list: CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', width: '100%' };
 const center: CSSProperties = {
   flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--label2)',
 };
