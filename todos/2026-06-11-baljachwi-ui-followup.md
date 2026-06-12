@@ -112,3 +112,31 @@
 - `repo.deletePhotos` 5테이블 rw 트랜잭션 원자성 + thumbs bulkDelete로 썸네일 누수 없음. 빈 ids no-op.
 - objectURL 생명주기(useThumbUrls·PhotoMapView): 취소 가드 + cleanup 전량 revoke → 누수 없음.
 - 비가역 삭제는 ConfirmDialog 확인 필수(우발 삭제 방지). userOverride(가고싶음)·sido·trips·home 보존.
+
+---
+
+# 지역지도 지역 상세 시트 후속 이슈
+
+> 작성일: 2026-06-12 / 출처: feat/region-detail 멀티에이전트 리뷰(Code Reviewer + Security Engineer)
+> Security High/Medium/Low 0건(머지 가능). Code Reviewer High 0건 / Medium 1건 / Low 2건. 아래는 잔여(선택적).
+
+## Medium → 프로토 스코프 수용(조치 보류)
+
+- [ ] **usePhotosForRegion 상시 전체 사진 구독** (`src/hooks/useRegionDetail.ts`)
+  - `usePhotosForRegion(viewing)`은 `viewing===null`(사진 보기 미진입)이어도 `useAllPhotos()`(전체 photoRefs liveQuery)를 항상 구독 → 결과만 빈 배열. 시트 닫혀 있어도 전체 사진 테이블 구독 유지.
+  - 현 프로토 규모(여행 0~소수)에선 비용 낮음. 대용량 라이브러리에서 상시 전체 toArray 구독은 오버헤드 → 위 'useAllPhotos 풀 테이블 구독 최적화' Low와 함께 `viewing` 진입 시에만 구독하도록 분리 검토.
+
+## Low (선택적)
+
+- [ ] **RegionDetailSheet close 버튼 `×` 데코레이션 aria-hidden** (`src/components/region/RegionDetailSheet.tsx`)
+  - `aria-label="닫기"`로 스크린리더는 커버되나, `×`(U+00D7) 문자 자체는 데코레이션 → `aria-hidden` 자식 span 래핑 시 더 명확. 기능 영향 없음.
+
+- [ ] **photosInRegion 잉여 `.slice()` 검토** (`src/lib/regionDetail.ts`)
+  - `.filter(...).slice().sort(...)`에서 `filter`가 이미 새 배열을 반환하므로 `.slice()`는 잉여(제거해도 입력 비변형 유지). 단, filter 제거 리팩토링 시 입력 변형 방지 방어선이기도 함 → 의도 주석 추가 또는 제거 중 택1(가독성 미세).
+
+## 검증 완료(조치 불요)
+
+- 외부 전송 0건(가고싶음=로컬 Dexie 트랜잭션만, 신규 fetch/network 없음). XSS/인젝션 없음(dangerouslySetInnerHTML/eval 전무, JSX 자동 이스케이프, `--accent`는 앱 자체 CSS 신뢰값).
+- `repo.setWantToGo` 4테이블 rw 트랜잭션 원자성(부분 실패 롤백) + 골든 `setWantToGo`가 visited 행 양방향 보존(데이터 손실 방지). regions 외 미터치.
+- 골든 코어(src/core/*·reconcile·storeOps·db·scanPipeline) diff 0건. db 스키마(regionStatuses PK=regionCode, photoRefs regionCode 인덱스 없음) 의존 정확(get 단건 / JS 필터).
+- 맵 생성 effect deps `[ack, level]` 불변, 강조·선택은 ref 미러+별도 effect로만 갱신 → 색칠/타일 동의/맵 재생성 흐름 미파괴. click 이중 발화 없음(전역 click은 region-fill 히트 0일 때만 해제). `map.remove()`가 리스너 정리 → 누수 없음. objectURL 생명주기(PhotoMapView 재사용 경로) 정상.
